@@ -38,12 +38,14 @@
   <h2>对话额度</h2>
   <div class="metric">
     <div class="bar">
-      <div class="bar-fill" style="width: {percent(quota.chat_quota_used || 0, quota.chat_quota_total || 0)}%"></div>
+      <div class="bar-fill" style="width: {percent(quota.used_quota || 0, (quota.used_quota || 0) + (quota.remain_quota || 0))}%"></div>
     </div>
     <p>
-      已用 <strong>${formatUsd(quota.chat_quota_used || 0)}</strong>
-      / 剩余 <strong>${formatUsd(quota.chat_quota_remaining || 0)}</strong>
-      / 总额 <strong>${formatUsd(quota.chat_quota_total || 0)}</strong>
+      已用 <strong>${formatUsd(quota.used_quota || 0)}</strong>
+      / 剩余 <strong>${formatUsd(quota.remain_quota || 0)}</strong>
+      {#if quota.unlimited_quota}
+        <span class="muted">（无限制）</span>
+      {/if}
     </p>
   </div>
 </section>
