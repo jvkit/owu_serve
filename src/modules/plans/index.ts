@@ -27,8 +27,14 @@ export function plansModule(app: Express) {
             const storage = db.prepare('SELECT * FROM user_storage WHERE user_email = ?').get(email) as any;
             const fc = db.prepare('SELECT COUNT(*) as count FROM files WHERE user_email = ?').get(email) as any;
 
+            const usedUsd = nativeToUsd(r.used_quota || 0);
+            const remainUsd = nativeToUsd(r.remain_quota || 0);
+
             res.json({
                 ...r,
+                chat_quota_used_usd: usedUsd,
+                chat_quota_remaining_usd: remainUsd,
+                chat_quota_total_usd: usedUsd + remainUsd,
                 plan: plan ? {
                     tier: plan.tier,
                     status: plan.status,
