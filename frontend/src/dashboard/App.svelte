@@ -1,7 +1,12 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { apiGet } from './lib/api';
   import QuotaCard from './components/QuotaCard.svelte';
   import KnowledgePanel from './components/KnowledgePanel.svelte';
+
+  onMount(() => {
+    return setupOwuMessageListener();
+  });
 
   const OWU_CHAT_URL = import.meta.env.VITE_OWU_CHAT_URL || '/';
 
@@ -15,12 +20,47 @@
   let loginEmail = $state('');
   let loginPassword = $state('');
   let loginLoading = $state(false);
+  let owuExchanging = $state(false);
 
   try {
     token = localStorage.getItem('gw_token') || '';
     email = localStorage.getItem('gw_email') || '';
   } catch (e) {
     console.error('localStorage error:', e);
+  }
+
+  async function exchangeOwuToken(owuToken: string) {
+    if (token || owuExchanging) return;
+    owuExchanging = true;
+    error = '';
+    try {
+      const res = await fetch('/api/auth/owu', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owu_token: owuToken }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'OWU 登录信息无效');
+
+      token = data.token;
+      email = data.user?.email || '';
+      localStorage.setItem('gw_token', token);
+      localStorage.setItem('gw_email', email);
+    } catch (e: any) {
+      error = e.message;
+    } finally {
+      owuExchanging = false;
+    }
+  }
+
+  function setupOwuMessageListener() {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'OWU_TOKEN' && event.data.token) {
+        exchangeOwuToken(event.data.token);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
   }
 
   async function loadQuota() {
@@ -95,8 +135,8 @@
     {/if}
   </header>
 
-  {#if loading}
-    <p class="muted">加载中...</p>
+  {#if loading || owuExchanging}
+    <p class="muted">{owuExchanging ? '正在通过 OWU 登录...' : '加载中...'}</p>
   {:else if !token}
     <section class="card login-card">
       <h2>登录</h2>

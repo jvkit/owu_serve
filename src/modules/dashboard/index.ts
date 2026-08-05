@@ -63,6 +63,58 @@ export function dashboardModule(app: Express) {
         }
     });
 
+    // OWU token exchange: called by iframe embedding the dashboard
+    app.post('/api/auth/owu', async (req: Request, res: Response) => {
+        try {
+            const owuToken = String(req.body.owu_token || '').trim();
+            if (!owuToken) {
+                res.status(400).json({ ok: false, error: '缺少 OWU token' });
+                return;
+            }
+
+            const url = config.openWebuiBaseUrl + '/api/v1/auths/';
+            const owuRes = await fetch(url, {
+                headers: {
+                    Authorization: `Bearer ${owuToken}`,
+                    Accept: 'application/json',
+                },
+                signal: AbortSignal.timeout(config.openWebuiTimeoutSeconds * 1000),
+            }).catch((e: any) => {
+                logger.error('[auth] OWU token verify network error:', e.message);
+                return null;
+            });
+
+            if (!owuRes) {
+                res.status(503).json({ ok: false, error: '身份验证服务暂时不可用' });
+                return;
+            }
+
+            const data: any = await owuRes.json().catch(() => null);
+            if (owuRes.status !== 200 || !data?.id) {
+                res.status(401).json({ ok: false, error: 'OWU token 无效或已过期' });
+                return;
+            }
+
+            const email = String(data.email || '').trim().toLowerCase();
+            if (!email) {
+                res.status(502).json({ ok: false, error: 'OWU 返回的用户信息不完整' });
+                return;
+            }
+
+            const token = signSession(email);
+            checkAndApplyPlanCycle(email);
+            createOrFetchUserToken(email, true).catch((e: any) =>
+                logger.error('[auth] token/plan creation failed:', e.message),
+            );
+            syncUserModel(email).catch((e: any) => logger.error('[owu] init model sync failed:', e.message));
+
+            res.json({ ok: true, token, user: { email: data.email, name: data.name, role: data.role } });
+        } catch (e: any) {
+            logger.error('[auth] owu exchange error:', e);
+            res.status(500).json({ ok: false, error: '服务器内部错误，请稍后重试' });
+        }
+    });
+
     // Serve dashboard SPA (also handled by root static middleware)
     app.get('/dashboard', (_req: Request, res: Response) => {
         res.sendFile(path.join(__dirname, '..', '..', '..', 'frontend', 'dist', 'index.html'));
