@@ -2,7 +2,6 @@ import type { Request, Response } from 'express';
 import { config } from '../../config';
 import { db } from '../../lib/db';
 import { logger } from '../../lib/logger';
-import { ApiError } from '../../lib/errors';
 import { createOrFetchUserToken } from '../../lib/token';
 import { checkAndApplyPlanCycle } from '../plans/service';
 import { syncUserModel } from '../rag/service';
@@ -54,6 +53,33 @@ function extractEmail(req: Request, body: any): string | null {
     return email || null;
 }
 
+function streamResponse(upstream: globalThis.Response, res: Response) {
+    res.status(upstream.status);
+    upstream.headers.forEach((val: string, key: string) => {
+        const lower = key.toLowerCase();
+        if (lower === 'content-encoding' || lower === 'content-length') return;
+        res.setHeader(key, val);
+    });
+
+    if (upstream.body) {
+        const reader = upstream.body.getReader();
+        const pump = async () => {
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    res.write(value);
+                }
+            } finally {
+                res.end();
+            }
+        };
+        pump();
+    } else {
+        res.end();
+    }
+}
+
 export async function proxyChatCompletion(req: Request, res: Response) {
     const body = req.body || {};
     const email = extractEmail(req, body);
@@ -67,6 +93,53 @@ export async function proxyChatCompletion(req: Request, res: Response) {
         return;
     }
 
+    const cleanBody = { ...body };
+    delete cleanBody.user;
+    delete cleanBody.metadata;
+    delete cleanBody.chat_id;
+    delete cleanBody.session_id;
+    delete cleanBody.conversation_id;
+    delete cleanBody.tool_ids;
+
+    // Direct mode: use fixed API key, skip per-user token management
+    if (config.directChatApiKey && config.directChatBaseUrl) {
+        try {
+            checkAndApplyPlanCycle(email);
+            const planRec = db.prepare('SELECT status FROM user_plans WHERE user_email = ?').get(email) as any;
+            if (planRec?.status === 'inactive') {
+                sendOpenAIError(res, 403, '套餐已过期，聊天功能暂停使用，请联系管理员续费');
+                return;
+            }
+
+            logger.info(`[chat] Direct proxy: ${email} model=${body.model}`);
+
+            const upstream = await fetch(`${config.directChatBaseUrl}/v1/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${config.directChatApiKey}`,
+                    'Accept-Encoding': 'identity',
+                },
+                body: JSON.stringify(cleanBody),
+            });
+
+            if (!upstream.ok) {
+                const errText = await upstream.text();
+                logger.warn(`[chat] Direct upstream error ${upstream.status}: ${errText.substring(0, 2000)}`);
+                logger.warn(`[chat] Direct upstream request body: ${JSON.stringify(cleanBody).substring(0, 2000)}`);
+                res.status(upstream.status).send(errText);
+                return;
+            }
+
+            streamResponse(upstream, res);
+        } catch (error: any) {
+            logger.error('[chat] Direct proxy error:', error);
+            sendOpenAIError(res, 500, error.message);
+        }
+        return;
+    }
+
+    // NewAPI mode: per-user token management
     let finalKey = '';
     try {
         checkAndApplyPlanCycle(email);
@@ -93,14 +166,6 @@ export async function proxyChatCompletion(req: Request, res: Response) {
         return;
     }
 
-    const cleanBody = { ...body };
-    delete cleanBody.user;
-    delete cleanBody.metadata;
-    delete cleanBody.chat_id;
-    delete cleanBody.session_id;
-    delete cleanBody.conversation_id;
-    delete cleanBody.tool_ids;
-
     try {
         const upstream = await fetch(`${config.newApiBaseUrl}/v1/chat/completions`, {
             method: 'POST',
@@ -118,28 +183,7 @@ export async function proxyChatCompletion(req: Request, res: Response) {
             return;
         }
 
-        res.status(upstream.status);
-        upstream.headers.forEach((val, key) => {
-            res.setHeader(key, val);
-        });
-
-        if (upstream.body) {
-            const reader = upstream.body.getReader();
-            const pump = async () => {
-                try {
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        res.write(value);
-                    }
-                } finally {
-                    res.end();
-                }
-            };
-            pump();
-        } else {
-            res.end();
-        }
+        streamResponse(upstream, res);
     } catch (error: any) {
         logger.error('[chat] Upstream proxy error:', error);
         sendOpenAIError(res, 500, error.message);

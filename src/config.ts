@@ -45,6 +45,11 @@ export const config = {
         .map(s => s.trim())
         .filter(Boolean),
 
+    // Direct chat mode: when set, bypass NewAPI per-user token management
+    // and use this key + URL directly for /v1/chat/completions proxy
+    directChatApiKey: (process.env.DIRECT_CHAT_API_KEY || '').trim(),
+    directChatBaseUrl: (process.env.DIRECT_CHAT_BASE_URL || '').trim().replace(/\/+$/, ''),
+
     // Files / OCR
     dbPath: process.env.DB_PATH || path.join(process.cwd(), 'data', 'gateway.db'),
     documentsDir: process.env.DOCUMENTS_DIR || path.join(process.cwd(), 'documents'),
