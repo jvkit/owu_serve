@@ -8,7 +8,7 @@ import { ensureUserStorage, renewUserStorage } from '../../lib/user';
 import { utcNow, randomId } from '../../lib/utils';
 import { checkAndApplyPlanCycle } from '../plans/service';
 import { syncUserModel } from '../rag/service';
-import { owuDeleteCollection, syncCollectionToOWU } from '../../lib/owu';
+import { owuDeleteCollection, owuListAllCollections, syncCollectionToOWU } from '../../lib/owu';
 import { config, SUPPORTED_EXTENSIONS, OCR_EXTENSIONS, PASSTHROUGH_EXTENSIONS } from '../../config';
 import { collectionDir, getEmailFromRequest, getTokenFromRequest } from '../files/service';
 
@@ -155,4 +155,54 @@ export function knowledgeModule(app: Express) {
             handleError(res, e);
         }
     });
+
+    startCollectionSyncTimer();
+}
+
+const COLLECTION_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+
+export function startCollectionSyncTimer(): void {
+    const run = async () => {
+        try {
+            await syncDeletedCollections();
+        } catch (e: any) {
+            logger.error('[knowledge] sync deleted collections failed:', e.message);
+        }
+    };
+    run();
+    setInterval(run, COLLECTION_SYNC_INTERVAL_MS);
+}
+
+export async function syncDeletedCollections(): Promise<void> {
+    try {
+        const owuItems = await owuListAllCollections();
+        const owuIds = new Set(owuItems.map((item: any) => item.id));
+        const rows = db
+            .prepare('SELECT id, user_email, owu_collection_id FROM collections WHERE owu_collection_id IS NOT NULL')
+            .all() as any[];
+
+        let deleted = 0;
+        for (const row of rows) {
+            if (owuIds.has(row.owu_collection_id)) continue;
+
+            const dirPath = collectionDir(row.user_email, row.id);
+            if (fs.existsSync(dirPath)) fs.rmSync(dirPath, { recursive: true });
+
+            db.transaction(() => {
+                db.prepare('DELETE FROM files WHERE collection_id = ? AND user_email = ?').run(row.id, row.user_email);
+                db.prepare('DELETE FROM collections WHERE id = ? AND user_email = ?').run(row.id, row.user_email);
+            })();
+
+            logger.info(
+                `[knowledge] deleted local collection ${row.id} because OWU collection ${row.owu_collection_id} no longer exists`,
+            );
+            deleted++;
+        }
+
+        if (deleted > 0) {
+            logger.info(`[knowledge] purged ${deleted} collection(s) already deleted in OWU`);
+        }
+    } catch (e: any) {
+        logger.error('[knowledge] sync deleted collections error:', e.message);
+    }
 }

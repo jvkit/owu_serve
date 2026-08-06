@@ -36,7 +36,7 @@ async function syncUserModelImpl(email: string): Promise<void> {
             .all(email) as any[];
         const remoteCollections = await owuListCollections();
         const knowledge = cols.map((c: any) => {
-            const remote = remoteCollections.find((k: any) => k.id === c.owu_collection_id);
+            const remote = remoteCollections.items.find((k: any) => k.id === c.owu_collection_id);
             return {
                 id: c.owu_collection_id,
                 name: c.name,

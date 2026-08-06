@@ -79,10 +79,25 @@ export async function owuGetAdminToken(): Promise<string> {
     return owuSignIn();
 }
 
-export async function owuListCollections(): Promise<any[]> {
+export async function owuListCollections(page = 1): Promise<{ items: any[]; total: number }> {
     await owuGetAdminToken();
-    const { data } = await owuRequest('GET', '/api/v1/knowledge/');
-    return data?.items || [];
+    const { data } = await owuRequest('GET', `/api/v1/knowledge/?page=${page}`);
+    return { items: data?.items || [], total: data?.total || 0 };
+}
+
+export async function owuListAllCollections(): Promise<any[]> {
+    await owuGetAdminToken();
+    const all: any[] = [];
+    let page = 1;
+    while (true) {
+        const { items, total } = await owuListCollections(page);
+        if (!items.length) break;
+        all.push(...items);
+        if (all.length >= total) break;
+        page++;
+        if (page > 100) break;
+    }
+    return all;
 }
 
 export async function owuCreateCollection(name: string): Promise<any> {
