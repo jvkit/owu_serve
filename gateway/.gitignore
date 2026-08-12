@@ -5,5 +5,6 @@ documents/
 *.log
 .env
 .env.local
+.env.bak.*
 .DS_Store
 logs/
