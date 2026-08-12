@@ -44,10 +44,10 @@ export async function fetchRemoteTokenKey(tokenId: any): Promise<string | null> 
 export function dbUpsertUser(r: any) {
     const stmt = db.prepare(`
       INSERT INTO user_tokens (
-        email, user_id, user_name, token_id, token_name, token_key,
+        email, user_id, user_name, user_role, token_id, token_name, token_key,
         remain_quota, used_quota, unlimited_quota, created_at, updated_at
       ) VALUES (
-        @email, @user_id, @user_name, @token_id, @token_name, @token_key,
+        @email, @user_id, @user_name, @user_role, @token_id, @token_name, @token_key,
         @remain_quota, @used_quota, @unlimited_quota, @created_at, @updated_at
       )
       ON CONFLICT(email) DO UPDATE SET
@@ -62,6 +62,7 @@ export function dbUpsertUser(r: any) {
         email: r.email ? String(r.email) : '',
         user_id: r.user_id ? String(r.user_id) : '',
         user_name: r.user_name ? String(r.user_name) : '',
+        user_role: r.user_role ? String(r.user_role) : '',
         token_id: parseInt(String(r.token_id)) || 0,
         token_name: r.token_name ? String(r.token_name) : '',
         token_key: r.token_key ? String(r.token_key) : '',
@@ -114,16 +115,37 @@ export async function searchRemoteToken(tokenName: string, needKey: boolean = tr
     return null;
 }
 
-export async function createOrFetchUserToken(email: string, autoCreate: boolean = true): Promise<any> {
+export async function createOrFetchUserToken(email: string, autoCreate: boolean = true, displayName?: string, role?: string): Promise<any> {
     if (tokenLocks.has(email)) return tokenLocks.get(email);
-    const p = createOrFetchUserTokenImpl(email, autoCreate);
+    const p = createOrFetchUserTokenImpl(email, autoCreate, displayName, role);
     tokenLocks.set(email, p);
     try { return await p; } finally { tokenLocks.delete(email); }
 }
 
-async function createOrFetchUserTokenImpl(email: string, autoCreate: boolean = true): Promise<any> {
+export function dbUpdateUserName(email: string, name: string) {
+    const clean = name ? String(name).trim() : '';
+    if (!clean) return;
+    db.prepare('UPDATE user_tokens SET user_name = ? WHERE email = ?').run(clean, email);
+}
+
+export function dbUpdateUserRole(email: string, role: string) {
+    const clean = role ? String(role).trim() : '';
+    if (!clean) return;
+    db.prepare('UPDATE user_tokens SET user_role = ? WHERE email = ?').run(clean, email);
+}
+
+async function createOrFetchUserTokenImpl(email: string, autoCreate: boolean = true, displayName?: string, role?: string): Promise<any> {
     const local = db.prepare('SELECT * FROM user_tokens WHERE email = ?').get(email) as any;
     if (local && local.token_key && !isMaskedTokenKey(local.token_key)) {
+        // Sync the real display name & role from OWU if we have them and they differ.
+        if (displayName && String(local.user_name || '') !== String(displayName)) {
+            dbUpdateUserName(email, displayName);
+            local.user_name = displayName;
+        }
+        if (role && String(local.user_role || '') !== String(role)) {
+            dbUpdateUserRole(email, role);
+            local.user_role = role;
+        }
         return local;
     }
 
@@ -204,7 +226,8 @@ async function createOrFetchUserTokenImpl(email: string, autoCreate: boolean = t
     const record = {
         email: email,
         user_id: '',
-        user_name: email,
+        user_name: displayName || email,
+        user_role: role || '',
         token_id: remoteInfo.id,
         token_name: tName,
         token_key: remoteInfo.key,

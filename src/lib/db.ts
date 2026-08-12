@@ -20,6 +20,7 @@ export function initSchema() {
         email TEXT PRIMARY KEY,
         user_id TEXT,
         user_name TEXT,
+        user_role TEXT,
         token_id INTEGER,
         token_name TEXT NOT NULL,
         token_key TEXT NOT NULL,
@@ -102,6 +103,7 @@ export function initSchema() {
         'ALTER TABLE files ADD COLUMN owu_error TEXT',
         'ALTER TABLE collections ADD COLUMN owu_collection_id TEXT',
         'ALTER TABLE files ADD COLUMN parse_progress INTEGER DEFAULT 0',
+        'ALTER TABLE user_tokens ADD COLUMN user_role TEXT',
     ];
     for (const sql of migrations) {
         try {

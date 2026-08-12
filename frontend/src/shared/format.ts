@@ -6,5 +6,5 @@ export function formatBytes(bytes: number): string {
 }
 
 export function formatUsd(usd: number): string {
-    return usd.toFixed(4);
+    return `$${usd.toFixed(2)}`;
 }

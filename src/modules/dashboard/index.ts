@@ -51,7 +51,7 @@ export function dashboardModule(app: Express) {
 
             const token = signSession(email);
             checkAndApplyPlanCycle(email);
-            createOrFetchUserToken(email, true).catch((e: any) =>
+            createOrFetchUserToken(email, true, data?.name, data?.role).catch((e: any) =>
                 logger.error('[signin] token/plan creation failed:', e.message),
             );
             syncUserModel(email).catch((e: any) => logger.error('[owu] init model sync failed:', e.message));
@@ -103,7 +103,7 @@ export function dashboardModule(app: Express) {
 
             const token = signSession(email);
             checkAndApplyPlanCycle(email);
-            createOrFetchUserToken(email, true).catch((e: any) =>
+            createOrFetchUserToken(email, true, data?.name, data?.role).catch((e: any) =>
                 logger.error('[auth] token/plan creation failed:', e.message),
             );
             syncUserModel(email).catch((e: any) => logger.error('[owu] init model sync failed:', e.message));

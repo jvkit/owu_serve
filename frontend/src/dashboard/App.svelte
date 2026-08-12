@@ -8,8 +8,6 @@
     return setupOwuMessageListener();
   });
 
-  const OWU_CHAT_URL = import.meta.env.VITE_OWU_CHAT_URL || '/';
-
   let email = $state('');
   let token = $state('');
   let loading = $state(true);
@@ -115,10 +113,6 @@
     if (reload) window.location.reload();
   }
 
-  function goToChat() {
-    window.location.href = OWU_CHAT_URL;
-  }
-
   $effect(() => {
     loadQuota();
   });
@@ -128,15 +122,6 @@
   <header>
     <div class="brand">
       <h1>PRIME AI 用户中心</h1>
-      {#if token && quota}
-        <span class="user-chip">👤 {email} · {quota.user?.role || 'user'}</span>
-      {/if}
-    </div>
-    <div class="header-actions">
-      {#if token}
-        <button onclick={goToChat}>进入对话</button>
-        <button class="ghost" onclick={() => logout()}>退出</button>
-      {/if}
     </div>
   </header>
 
@@ -181,30 +166,6 @@
   .brand h1 {
     font-size: 1.25rem;
     margin: 0;
-  }
-
-  .user-chip {
-    font-size: 0.8rem;
-    color: var(--muted);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    padding: 0.15rem 0.6rem;
-    border-radius: 999px;
-    white-space: nowrap;
-    max-width: 260px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  button.ghost {
-    background: transparent;
-    color: var(--muted);
-    border: 1px solid var(--border);
-  }
-
-  button.ghost:hover {
-    background: var(--bg);
-    color: var(--text);
   }
 
   .stats-grid {
