@@ -126,13 +126,18 @@
 
 <main class="container">
   <header>
-    <h1>用户中心</h1>
-    {#if token}
-      <div class="header-actions">
+    <div class="brand">
+      <h1>PRIME AI 用户中心</h1>
+      {#if token && quota}
+        <span class="user-chip">👤 {email} · {quota.user?.role || 'user'}</span>
+      {/if}
+    </div>
+    <div class="header-actions">
+      {#if token}
         <button onclick={goToChat}>进入对话</button>
-        <button onclick={() => logout()}>退出</button>
-      </div>
-    {/if}
+        <button class="ghost" onclick={() => logout()}>退出</button>
+      {/if}
+    </div>
   </header>
 
   {#if loading || owuExchanging}
@@ -158,13 +163,65 @@
   {:else if error}
     <p class="error">{error}</p>
   {:else if quota}
-    <section class="card">
-      <h2>账号信息</h2>
-      <p><strong>邮箱：</strong>{email}</p>
-      <p><strong>角色：</strong>{quota.user?.role || 'user'}</p>
-    </section>
-
-    <QuotaCard {quota} />
     <KnowledgePanel />
+    <div class="stats-grid">
+      <QuotaCard {quota} {email} />
+    </div>
   {/if}
 </main>
+
+<style>
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .brand h1 {
+    font-size: 1.25rem;
+    margin: 0;
+  }
+
+  .user-chip {
+    font-size: 0.8rem;
+    color: var(--muted);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  button.ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+
+  button.ghost:hover {
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+  }
+
+  @media (max-width: 1200px) {
+    .stats-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 640px) {
+    .stats-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
