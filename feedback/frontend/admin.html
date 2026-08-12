@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>反馈管理</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: #f9fafb; }
+    .header { background: #fff; padding: 16px 24px; border-bottom: 1px solid #e5e7eb; }
+    .header h1 { margin: 0; font-size: 20px; }
+    .header p { margin: 4px 0 0; color: #6b7280; font-size: 13px; }
+    .container { padding: 20px 24px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; align-items: center; }
+    .toolbar select, .toolbar input, .toolbar button { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; }
+    .toolbar button { background: #2563eb; color: #fff; border-color: #2563eb; cursor: pointer; }
+    .toolbar button.secondary { background: #fff; color: #374151; border-color: #d1d5db; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; font-size: 13px; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: left; }
+    th { background: #f3f4f6; font-weight: 600; }
+    tr:hover { background: #f9fafb; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+    .pending { background: #fef3c7; color: #92400e; }
+    .processing { background: #dbeafe; color: #1e40af; }
+    .done { background: #dcfce7; color: #166534; }
+    .closed { background: #f3f4f6; color: #4b5563; }
+    .link { color: #2563eb; cursor: pointer; text-decoration: underline; }
+    .pagination { margin-top: 16px; display: flex; gap: 10px; align-items: center; }
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+      display: none; align-items: center; justify-content: center; z-index: 20000;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal { background: #fff; border-radius: 12px; width: 560px; max-width: 90%; max-height: 90vh; overflow-y: auto; padding: 20px; }
+    .modal h3 { margin-top: 0; }
+    .modal label { display: block; margin: 10px 0 4px; font-size: 13px; font-weight: 500; }
+    .modal input, .modal select, .modal textarea { width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; }
+    .modal .actions { margin-top: 16px; display: flex; justify-content: flex-end; gap: 10px; }
+    .modal .actions button { padding: 8px 16px; border-radius: 6px; border: 1px solid #d1d5db; cursor: pointer; }
+    .modal .actions button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .leaderboard-modal { width: 720px; }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+    .checkbox-row input[type="checkbox"] { width: auto; margin: 0; flex: 0 0 auto; }
+    .checkbox-row label { margin: 0; font-weight: normal; cursor: pointer; color: #374151; }
+    .attachments-preview { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+    .attachments-preview img { max-width: 120px; max-height: 120px; border-radius: 8px; border: 1px solid #e5e7eb; object-fit: cover; cursor: pointer; }
+    .view-modal { width: 640px; }
+    .view-grid { display: grid; grid-template-columns: 90px 1fr; gap: 8px 12px; font-size: 13px; margin-bottom: 12px; }
+    .view-grid strong { color: #6b7280; font-weight: 500; }
+    .view-grid .long { white-space: pre-wrap; word-break: break-word; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>反馈管理</h1>
+    <p>筛选、处理反馈，查看排行榜与导出</p>
+  </div>
+
+  <div class="container">
+    <div class="toolbar">
+      <select id="statusFilter"><option value="">全部状态</option><option value="pending">待处理</option><option value="processing">处理中</option><option value="done">已完成</option><option value="closed">已关闭</option></select>
+      <select id="categoryFilter"><option value="">全部项目</option><option>首页</option><option>数据看板</option><option>搜索</option><option>导出</option><option>聊天交互</option><option>模型管理</option><option>其他</option></select>
+      <select id="typeFilter"><option value="">全部类型</option><option value="bug">Bug</option><option value="suggest">功能建议</option><option value="experience">体验问题</option><option value="other">其他</option></select>
+      <input id="keyword" placeholder="搜索账号/描述" />
+      <button onclick="applyFilter()">查询</button>
+      <button class="secondary" onclick="openLeaderboard()">排行榜</button>
+      <button class="secondary" onclick="exportExcel()">导出 Excel</button>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>ID</th><th>账号</th><th>项目</th><th>类型</th><th>描述</th><th>状态</th><th>提交时间</th><th>操作</th></tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+
+    <div class="pagination">
+      <button onclick="prevPage()">上一页</button>
+      <span id="pageInfo"></span>
+      <button onclick="nextPage()">下一页</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="editModal">
+    <div class="modal">
+      <h3>处理反馈 #<span id="editId"></span></h3>
+      <div id="editDetail" style="font-size:13px;color:#4b5563;margin-bottom:12px;"></div>
+      <div class="attachments-preview" id="editAttachments"></div>
+      <label>状态</label>
+      <select id="editStatus"><option value="pending">待处理</option><option value="processing">处理中</option><option value="done">已完成</option><option value="closed">已关闭</option></select>
+      <label>处理人</label>
+      <input id="editHandler" />
+      <label>处理备注</label>
+      <textarea id="editNote" rows="3"></textarea>
+      <div class="checkbox-row">
+        <input type="checkbox" id="editCarousel" />
+        <label for="editCarousel">上轮播播报</label>
+      </div>
+      <div id="carouselTextWrap" style="display:none;">
+        <label>轮播摘要（脱敏，只写部门）</label>
+        <input id="editCarouselText" />
+      </div>
+      <div class="actions">
+        <button onclick="closeEdit()">取消</button>
+        <button class="primary" onclick="saveEdit()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="viewModal">
+    <div class="modal view-modal">
+      <h3>反馈详情 #<span id="viewId"></span></h3>
+      <div class="view-grid" id="viewContent"></div>
+      <div class="attachments-preview" id="viewAttachments"></div>
+      <div class="actions"><button class="primary" onclick="closeView()">关闭</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="leaderboardModal">
+    <div class="modal leaderboard-modal">
+      <h3>反馈排行榜</h3>
+      <table>
+        <thead><tr><th>排名</th><th>账号</th><th>姓名</th><th>部门</th><th>有效反馈次数</th><th>最近反馈</th></tr></thead>
+        <tbody id="leaderboardBody"></tbody>
+      </table>
+      <div class="actions"><button class="primary" onclick="closeLeaderboard()">关闭</button></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { listFeedback, updateFeedback, getLeaderboard, getAttachmentObjectUrl, setToken } from './api.js?v=7';
+
+    window.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'OWU_TOKEN') {
+        setToken(event.data.token);
+        load();
+      }
+    });
+
+    let page = 0;
+    const limit = 20;
+    let selected = null;
+    let attachmentUrls = [];
+    let viewAttachmentUrls = [];
+
+    function fmtTime(t) {
+      return t ? new Date(t.replace(' ', 'T')).toLocaleString('zh-CN') : '-';
+    }
+
+    function typeLabel(v) {
+      return { bug: 'Bug', suggest: '功能建议', experience: '体验问题', other: '其他' }[v] || v;
+    }
+
+    function statusHtml(status) {
+      const map = { pending: ['待处理', 'pending'], processing: ['处理中', 'processing'], done: ['已完成', 'done'], closed: ['已关闭', 'closed'] };
+      const [label, cls] = map[status] || [status, ''];
+      return `<span class="badge ${cls}">${label}</span>`;
+    }
+
+    async function loadAttachmentImages(container, attachments, urlStore) {
+      container.innerHTML = '';
+      urlStore.forEach(u => URL.revokeObjectURL(u));
+      urlStore.length = 0;
+      if (!attachments?.length) return;
+      for (const a of attachments) {
+        try {
+          const url = await getAttachmentObjectUrl(a.id);
+          urlStore.push(url);
+          const img = document.createElement('img');
+          img.src = url;
+          img.title = a.file_name || '截图';
+          img.addEventListener('click', () => window.open(url, '_blank'));
+          container.appendChild(img);
+        } catch (e) {
+          console.error('load attachment failed', a.id, e);
+        }
+      }
+    }
+
+    function buildParams() {
+      return {
+        status: document.getElementById('statusFilter').value,
+        category: document.getElementById('categoryFilter').value,
+        type: document.getElementById('typeFilter').value,
+        keyword: document.getElementById('keyword').value,
+        skip: page * limit,
+        limit,
+      };
+    }
+
+    window.applyFilter = () => {
+      page = 0;
+      load();
+    };
+
+    window.load = async () => {
+      const params = buildParams();
+      console.log('[admin] load params:', params);
+      try {
+        const res = await listFeedback(params);
+        console.log('[admin] load response:', res);
+        const tbody = document.getElementById('tbody');
+        tbody.innerHTML = res.items.map(item => `
+          <tr>
+            <td>${item.id}</td>
+            <td>${item.account}</td>
+            <td>${item.category}</td>
+            <td>${typeLabel(item.type)}</td>
+            <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${item.description}">${item.description}</td>
+            <td>${statusHtml(item.status)}</td>
+            <td>${fmtTime(item.created_at)}</td>
+            <td>
+              <span class="link" onclick="openView(${JSON.stringify(item).replace(/"/g, '&quot;')})">查看</span>
+              <span style="color:#d1d5db;margin:0 4px;">|</span>
+              <span class="link" onclick="openEdit(${JSON.stringify(item).replace(/"/g, '&quot;')})">处理</span>
+            </td>
+          </tr>
+        `).join('');
+        document.getElementById('pageInfo').textContent = `第 ${page + 1} 页`;
+      } catch (e) {
+        alert(e.message || '加载失败');
+      }
+    };
+
+    window.prevPage = () => { if (page > 0) { page--; load(); } };
+    window.nextPage = () => { page++; load(); };
+
+    ['statusFilter', 'categoryFilter', 'typeFilter'].forEach(id => {
+      document.getElementById(id).addEventListener('change', () => { page = 0; load(); });
+    });
+    document.getElementById('keyword').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { page = 0; load(); }
+    });
+
+    window.openEdit = async (item) => {
+      selected = item;
+      document.getElementById('editId').textContent = item.id;
+      document.getElementById('editDetail').innerHTML = `
+        <strong>账号：</strong>${item.account}<br>
+        <strong>描述：</strong>${item.description}
+      `;
+      await loadAttachmentImages(document.getElementById('editAttachments'), item.attachments, attachmentUrls);
+      document.getElementById('editStatus').value = item.status;
+      document.getElementById('editHandler').value = item.handler || '';
+      document.getElementById('editNote').value = item.handle_note || '';
+      document.getElementById('editCarousel').checked = item.is_carousel === 1;
+      document.getElementById('editCarouselText').value = item.carousel_text || '';
+      document.getElementById('carouselTextWrap').style.display = item.is_carousel === 1 ? 'block' : 'none';
+      document.getElementById('editModal').classList.add('open');
+    };
+
+    document.getElementById('editCarousel').addEventListener('change', (e) => {
+      document.getElementById('carouselTextWrap').style.display = e.target.checked ? 'block' : 'none';
+    });
+
+    window.closeEdit = () => {
+      selected = null;
+      document.getElementById('editModal').classList.remove('open');
+      document.getElementById('editAttachments').innerHTML = '';
+      attachmentUrls.forEach(u => URL.revokeObjectURL(u));
+      attachmentUrls = [];
+    };
+
+    window.openView = async (item) => {
+      document.getElementById('viewId').textContent = item.id;
+      const p = item.profile || {};
+      document.getElementById('viewContent').innerHTML = `
+        <strong>账号</strong><div>${item.account || '-'}</div>
+        <strong>反馈项目</strong><div>${item.category || '-'}</div>
+        <strong>反馈类型</strong><div>${typeLabel(item.type)}</div>
+        <strong>提交时间</strong><div>${fmtTime(item.created_at)}</div>
+        <strong>状态</strong><div>${statusHtml(item.status)}</div>
+        <strong>反馈描述</strong><div class="long">${item.description || '-'}</div>
+        <strong>备注补充</strong><div class="long">${item.remark || '-'}</div>
+        <strong>姓名</strong><div>${p.name || '-'}</div>
+        <strong>部门</strong><div>${p.department || '-'}</div>
+        <strong>联系电话</strong><div>${p.phone || '-'}</div>
+        <strong>联系邮箱</strong><div>${p.email || '-'}</div>
+        <strong>参与排名</strong><div>${p.join_ranking ? '是' : '否'}</div>
+      `;
+      await loadAttachmentImages(document.getElementById('viewAttachments'), item.attachments, viewAttachmentUrls);
+      document.getElementById('viewModal').classList.add('open');
+    };
+
+    window.closeView = () => {
+      document.getElementById('viewModal').classList.remove('open');
+      document.getElementById('viewAttachments').innerHTML = '';
+      viewAttachmentUrls.forEach(u => URL.revokeObjectURL(u));
+      viewAttachmentUrls = [];
+    };
+
+    window.saveEdit = async () => {
+      if (!selected) return;
+      try {
+        await updateFeedback(selected.id, {
+          status: document.getElementById('editStatus').value,
+          handler: document.getElementById('editHandler').value,
+          handle_note: document.getElementById('editNote').value,
+          is_carousel: document.getElementById('editCarousel').checked ? 1 : 0,
+          carousel_text: document.getElementById('editCarouselText').value,
+        });
+        closeEdit();
+        load();
+      } catch (e) {
+        alert(e.message || '更新失败');
+      }
+    };
+
+    window.openLeaderboard = async () => {
+      try {
+        const list = await getLeaderboard();
+        document.getElementById('leaderboardBody').innerHTML = list.map((e, i) => `
+          <tr><td>${i + 1}</td><td>${e.account}</td><td>${e.name || '-'}</td><td>${e.department || '-'}</td><td>${e.effective_count}</td><td>${fmtTime(e.latest_feedback_at)}</td></tr>
+        `).join('');
+        document.getElementById('leaderboardModal').classList.add('open');
+      } catch (e) {
+        alert(e.message || '加载失败');
+      }
+    };
+
+    window.closeLeaderboard = () => document.getElementById('leaderboardModal').classList.remove('open');
+
+    function escapeCsvCell(value) {
+      const text = value == null ? '' : String(value).replace(/\r?\n/g, ' ');
+      if (/[",\n\r]/.test(text)) {
+        return '"' + text.replace(/"/g, '""') + '"';
+      }
+      return text;
+    }
+
+    window.exportExcel = async () => {
+      try {
+        const baseParams = buildParams();
+        const allItems = [];
+        const pageLimit = 200;
+        let pageIdx = 0;
+        while (true) {
+          const params = { ...baseParams, skip: pageIdx * pageLimit, limit: pageLimit };
+          const res = await listFeedback(params);
+          allItems.push(...res.items);
+          if (allItems.length >= res.total || res.items.length < pageLimit) break;
+          pageIdx++;
+          if (pageIdx > 100) break; // safety guard
+        }
+        const rows = [
+          ['ID', '账号', '项目', '类型', '描述', '状态', '提交时间', '处理人', '处理备注'],
+          ...allItems.map(item => [
+            item.id,
+            item.account,
+            item.category,
+            typeLabel(item.type),
+            item.description,
+            { pending: '待处理', processing: '处理中', done: '已完成', closed: '已关闭' }[item.status] || item.status,
+            item.created_at || '',
+            item.handler || '',
+            item.handle_note || '',
+          ]),
+        ];
+        const csv = '\uFEFF' + rows.map(r => r.map(escapeCsvCell).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `反馈导出_${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert(e.message || '导出失败');
+      }
+    };
+
+    // Wait for OWU to send token via postMessage before loading data.
+    // The message handler above will call load().
+  </script>
+</body>
+</html>

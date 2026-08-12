@@ -1,0 +1,23 @@
+services:
+  feedback-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: feedback-service:local
+    container_name: feedback-service
+    ports:
+      - "3003:8000"
+    volumes:
+      - feedback-data:/app/data
+      - feedback-uploads:/app/uploads
+    environment:
+      - OWUI_BASE_URL=${OWUI_BASE_URL:-http://host.docker.internal:8080}
+      - FEEDBACK_DATA_DIR=/app/data
+      - FEEDBACK_UPLOADS_DIR=/app/uploads
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    restart: unless-stopped
+
+volumes:
+  feedback-data: {}
+  feedback-uploads: {}

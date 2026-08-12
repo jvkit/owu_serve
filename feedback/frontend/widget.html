@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>产品反馈</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: transparent;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    .fab {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .fab:hover {
+      transform: scale(1.05);
+      box-shadow: 0 8px 22px rgba(37, 99, 235, 0.45);
+    }
+    .fab svg {
+      width: 26px;
+      height: 26px;
+      fill: currentColor;
+    }
+    .fab-close {
+      position: fixed;
+      bottom: 66px;
+      right: 16px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #9ca3af;
+      color: #fff;
+      border: 2px solid #fff;
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+      z-index: 10001;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      transition: background 0.15s;
+    }
+    .fab-close:hover { background: #6b7280; }
+
+    .panel {
+      position: fixed;
+      bottom: 88px;
+      right: 20px;
+      width: 380px;
+      max-height: 80vh;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 20px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.18);
+      z-index: 10000;
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .panel.open { display: flex; }
+
+    .backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.25);
+      z-index: 9998;
+      display: none;
+    }
+    .backdrop.open { display: block; }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 18px 12px;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .panel-header h3 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 600;
+      color: #111827;
+    }
+    .panel-header .close {
+      width: 28px;
+      height: 28px;
+      border: none;
+      background: #f3f4f6;
+      border-radius: 50%;
+      color: #6b7280;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+    .panel-header .close:hover { background: #e5e7eb; color: #374151; }
+
+    .panel-body {
+      padding: 16px 18px 20px;
+      overflow-y: auto;
+    }
+
+    .notice {
+      background: #eff6ff;
+      color: #1e40af;
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 12px;
+      line-height: 1.5;
+      margin-bottom: 14px;
+    }
+
+    label { display: block; margin: 12px 0 5px; font-size: 13px; font-weight: 500; color: #374151; }
+    input, select, textarea {
+      width: 100%;
+      padding: 9px 11px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+    }
+    textarea { resize: vertical; }
+
+    .radio-group { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; }
+    .radio-group label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin: 0;
+      font-weight: normal;
+      cursor: pointer;
+      color: #4b5563;
+    }
+    .radio-group input { width: auto; }
+
+    .file-input {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border: 1px dashed #d1d5db;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 5px;
+    }
+    .file-input input[type="file"] {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .file-label {
+      display: inline-block;
+      padding: 5px 10px;
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      color: #374151;
+    }
+    .file-text {
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .profile-section {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 12px;
+      margin: 12px 0;
+      display: none;
+      background: #fafafa;
+    }
+    .profile-section.open { display: block; }
+
+    .toggle {
+      color: #2563eb;
+      font-size: 12px;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+      margin-top: 8px;
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .checkbox-row input[type="checkbox"] {
+      width: auto;
+      flex: 0 0 auto;
+      margin: 0;
+    }
+    .checkbox-row label {
+      margin: 0;
+      font-weight: normal;
+      cursor: pointer;
+      color: #374151;
+    }
+
+    .privacy-hint {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+
+    input:disabled { background: #f3f4f6; color: #6b7280; }
+
+    .previews { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .previews .thumb { position: relative; width: 48px; height: 48px; }
+    .previews img { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; }
+    .previews .remove {
+      position: absolute; top: -5px; right: -5px; width: 18px; height: 18px;
+      background: #ef4444; color: #fff; border: none; border-radius: 50%; font-size: 12px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .submit {
+      width: 100%;
+      margin-top: 16px;
+      padding: 11px;
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .submit:hover { opacity: 0.95; }
+    .submit:active { transform: translateY(1px); }
+    .submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .msg {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      display: none;
+      line-height: 1.4;
+    }
+    .msg.success { background: #dcfce7; color: #166534; display: block; }
+    .msg.error { background: #fee2e2; color: #991b1b; display: block; }
+  </style>
+</head>
+<body>
+  <button class="fab" id="fab" title="产品反馈">
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
+      <circle cx="9" cy="10" r="1.2"/>
+      <circle cx="15" cy="10" r="1.2"/>
+    </svg>
+  </button>
+  <button class="fab-close" id="fabClose" title="隐藏反馈按钮（刷新后恢复）">×</button>
+
+  <div class="backdrop" id="backdrop"></div>
+
+  <div class="panel" id="panel">
+    <div class="panel-header">
+      <h3>产品反馈</h3>
+      <button class="close" id="closeBtn" title="关闭">×</button>
+    </div>
+    <div class="panel-body">
+      <div class="notice">您的个人信息仅用于奖励发放时与您联系，不会被公开或用于其他用途。</div>
+      <form id="form">
+        <label>账号</label>
+        <input type="text" id="account" disabled />
+
+        <div class="profile-section open" id="profileSection">
+          <input id="name" placeholder="姓名" />
+          <input id="department" placeholder="部门" />
+          <input id="phone" placeholder="联系电话" />
+          <input id="email" placeholder="联系邮箱" />
+          <div class="privacy-hint">请填写真实信息，方便我们在需要时与您联系；信息严格保密，仅用于反馈跟进及奖励发放。</div>
+        </div>
+
+        <label for="category">反馈项目</label>
+        <select id="category" required>
+          <option value="" disabled selected>请选择</option>
+          <option>首页</option>
+          <option>数据看板</option>
+          <option>搜索</option>
+          <option>导出</option>
+          <option>聊天交互</option>
+          <option>模型管理</option>
+          <option>其他</option>
+        </select>
+
+        <label>反馈类型</label>
+        <div class="radio-group">
+          <label><input type="radio" name="type" value="bug"> Bug</label>
+          <label><input type="radio" name="type" value="suggest"> 功能建议</label>
+          <label><input type="radio" name="type" value="experience"> 体验问题</label>
+          <label><input type="radio" name="type" value="other" checked> 其他</label>
+        </div>
+
+        <label for="description">反馈描述</label>
+        <textarea id="description" rows="4" minlength="10" maxlength="2000" required placeholder="问题现象 + 期望效果"></textarea>
+
+        <label for="screenshots">反馈截图（最多3张）</label>
+        <div class="file-input" id="screenshotsWrap">
+          <input type="file" id="screenshots" accept="image/png,image/jpeg" multiple />
+          <label for="screenshots" class="file-label">选择文件</label>
+          <span class="file-text" id="fileText">未选择任何文件</span>
+        </div>
+        <div class="previews" id="previews"></div>
+
+        <label for="remark">备注补充</label>
+        <textarea id="remark" rows="2" maxlength="500"></textarea>
+
+        <button type="submit" class="submit" id="submit">提交反馈</button>
+        <div class="msg" id="msg"></div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module">
+    import {
+      getProfile, updateProfile, createFeedback, setToken
+    } from './api.js?v=7';
+
+    window.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'OWU_TOKEN') {
+        setToken(event.data.token);
+        loadProfile();
+      }
+    });
+
+    const fab = document.getElementById('fab');
+    const fabClose = document.getElementById('fabClose');
+    const panel = document.getElementById('panel');
+    const backdrop = document.getElementById('backdrop');
+    const closeBtn = document.getElementById('closeBtn');
+    const form = document.getElementById('form');
+    const profileSection = document.getElementById('profileSection');
+    const screenshotsInput = document.getElementById('screenshots');
+    const fileText = document.getElementById('fileText');
+    const previews = document.getElementById('previews');
+    const submitBtn = document.getElementById('submit');
+    const msg = document.getElementById('msg');
+
+    function updateFileText() {
+      fileText.textContent = files.length > 0 ? `已选择 ${files.length} 张` : '未选择任何文件';
+    }
+
+    let profile = { join_ranking: 1 };
+    let files = [];
+    let isGuest = false;
+
+    function notifyParent(open, dismiss = false) {
+      try {
+        window.parent.postMessage({ type: 'FEEDBACK_PANEL', open, dismiss }, '*');
+      } catch (e) {}
+    }
+
+    function setPanel(open) {
+      panel.classList.toggle('open', open);
+      backdrop.classList.toggle('open', open);
+      notifyParent(open);
+      if (open) loadProfile();
+    }
+
+    function dismissFab() {
+      setPanel(false);
+      fab.style.display = 'none';
+      fabClose.style.display = 'none';
+      notifyParent(false, true);
+    }
+
+    function getGuestAccount() {
+      let guest = localStorage.getItem('feedback_guest_account');
+      if (!guest) {
+        guest = 'guest_' + Math.random().toString(36).slice(2, 10);
+        localStorage.setItem('feedback_guest_account', guest);
+      }
+      return guest;
+    }
+
+    async function loadProfile() {
+      try {
+        profile = await getProfile();
+        isGuest = false;
+        document.getElementById('account').value = profile.account || '';
+        document.getElementById('name').value = profile.name || '';
+        document.getElementById('department').value = profile.department || '';
+        document.getElementById('phone').value = profile.phone || '';
+        document.getElementById('email').value = profile.email || '';
+      } catch (e) {
+        console.error('load profile failed, falling back to guest', e);
+        isGuest = true;
+        profile = { account: getGuestAccount(), name: '', department: '', phone: '', email: '', join_ranking: 1 };
+        document.getElementById('account').value = profile.account;
+      }
+    }
+
+    fab.addEventListener('click', () => {
+      const willOpen = !panel.classList.contains('open');
+      setPanel(willOpen);
+    });
+
+    closeBtn.addEventListener('click', () => setPanel(false));
+
+    fabClose.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dismissFab();
+    });
+
+    backdrop.addEventListener('click', () => {
+      if (confirm('确定关闭反馈窗口吗？')) {
+        setPanel(false);
+      }
+    });
+
+    screenshotsInput.addEventListener('change', () => {
+      const selected = Array.from(screenshotsInput.files).slice(0, 3 - files.length);
+      for (const f of selected) {
+        files.push(f);
+        const url = URL.createObjectURL(f);
+        const div = document.createElement('div');
+        div.className = 'thumb';
+        div.innerHTML = `<img src="${url}" /><button class="remove" title="移除">×</button>`;
+        div.querySelector('.remove').addEventListener('click', () => {
+          files = files.filter(x => x !== f);
+          div.remove();
+          updateFileText();
+        });
+        previews.appendChild(div);
+      }
+      screenshotsInput.value = '';
+      updateFileText();
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      msg.className = 'msg';
+      msg.textContent = '';
+
+      const category = document.getElementById('category').value;
+      const description = document.getElementById('description').value;
+      if (!category || description.length < 10) {
+        msg.className = 'msg error';
+        msg.textContent = '请填写反馈项目并至少输入 10 个字符的描述';
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = '提交中...';
+      try {
+        const type = document.querySelector('input[name="type"]:checked').value;
+        const remark = document.getElementById('remark').value;
+
+        if (!isGuest) {
+          profile.name = document.getElementById('name').value;
+          profile.department = document.getElementById('department').value;
+          profile.phone = document.getElementById('phone').value;
+          profile.email = document.getElementById('email').value;
+          profile.join_ranking = 1;
+          await updateProfile(profile);
+        }
+
+        await createFeedback({
+          category,
+          type,
+          description,
+          remark,
+          guest_account: isGuest ? profile.account : undefined,
+          screenshots: files,
+        });
+
+        msg.className = 'msg success';
+        msg.textContent = '反馈提交成功，感谢你的建议！';
+        form.reset();
+        previews.innerHTML = '';
+        files = [];
+        updateFileText();
+      } catch (err) {
+        console.error('[submit feedback error]', err);
+        msg.className = 'msg error';
+        msg.textContent = err.message || '提交失败';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '提交反馈';
+      }
+    });
+
+    // Start collapsed so parent can size the iframe to the button only.
+    notifyParent(false);
+  </script>
+</body>
+</html>
