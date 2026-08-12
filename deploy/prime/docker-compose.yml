@@ -23,6 +23,7 @@ services:
     env_file: .env
     environment:
       WEBUI_NAME: PRIME AI
+      PORT: "8080"
       OPENAI_API_BASE_URL: http://gateway:3019/v1
       OPENAI_API_KEY: ${OPENAI_API_KEY:-none}
       RAG_EMBEDDING_MODEL: sentence-transformers/all-MiniLM-L6-v2
