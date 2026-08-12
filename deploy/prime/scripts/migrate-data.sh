@@ -2,9 +2,10 @@
 # PRIME AI 数据迁移脚本（服务器上执行）
 #
 # 原则：只读复制旧数据 → 复制到 prime/data，全程不影响现有服务运行。
+# OWU 卷用 docker 临时容器复制（无需 sudo）；其余目录直接 cp。
 # 已有 prime/data 时跳过（不重复覆盖）。
 #
-# 用法：sudo bash scripts/migrate-data.sh
+# 用法：bash scripts/migrate-data.sh
 
 set -euo pipefail
 
@@ -14,16 +15,17 @@ DATA_DIR="${PRIME_DIR}/data"
 echo "==> 迁移开始：${DATA_DIR}"
 
 # ---------- 1. Open WebUI 数据（volume: open-webui_open-webui）----------
-SRC_OWU_VOL="/var/lib/docker/volumes/open-webui_open-webui/_data"
 DST_OWU="${DATA_DIR}/open-webui"
-if [ ! -d "${DST_OWU}/webui.db" ] && [ ! -s "${DST_OWU}/webui.db" ]; then
-    echo "==> 复制 Open WebUI 卷数据"
-    mkdir -p "${DST_OWU}"
-    # sqlite 运行中复制：连同 -wal/-shm 一并复制，避免只复制主文件导致 WAL 丢失
-    cp -a "${SRC_OWU_VOL}/." "${DST_OWU}/"
-    echo "    Open WebUI 数据已复制: $(du -sh ${DST_OWU} | cut -f1)"
-else
+if [ -f "${DST_OWU}/webui.db" ] || [ -d "${DST_OWU}/webui.db" ]; then
     echo "==> 跳过 Open WebUI（已存在数据）"
+else
+    echo "==> 复制 Open WebUI 卷数据（docker 临时容器，只读挂载旧卷）"
+    mkdir -p "${DST_OWU}"
+    docker run --rm \
+        -v open-webui_open-webui:/src:ro \
+        -v "${DST_OWU}:/dst" \
+        alpine:3 cp -a /src/. /dst/
+    echo "    Open WebUI 数据已复制: $(du -sh ${DST_OWU} | cut -f1)"
 fi
 
 # ---------- 2. Gateway 数据（旧版裸跑，db 在 /home/liyang/*.db）----------
@@ -42,16 +44,22 @@ fi
 # 注意：新版 gateway 使用 gateway.db（better-sqlite3），若旧版是分表 db 需要额外转换，
 # 由部署时人工确认。
 
-# ---------- 3. Feedback 数据（裸跑 uvicorn 或旧容器 3333）----------
-SRC_FB="${DATA_DIR}/feedback"
-mkdir -p "${SRC_FB}" "${DATA_DIR}/feedback-uploads"
-if [ -d "/home/liyang/jvkit/owu-feedback/data" ]; then
-    cp -an "/home/liyang/jvkit/owu-feedback/data/." "${SRC_FB}/" || true
-    echo "==> 复制 feedback/data"
+# ---------- 3. Feedback 数据（docker 卷：feedback-data / feedback-uploads）----------
+DST_FB="${DATA_DIR}/feedback"
+DST_FBU="${DATA_DIR}/feedback-uploads"
+if [ -f "${DST_FB}/feedback.db" ]; then
+    echo "==> 跳过 Feedback data（已存在）"
+else
+    echo "==> 复制 Feedback 数据卷（feedback-data）"
+    mkdir -p "${DST_FB}"
+    docker run --rm -v feedback-data:/src:ro -v "${DST_FB}:/dst" alpine:3 cp -a /src/. /dst/
 fi
-if [ -d "/home/liyang/jvkit/owu-feedback/uploads" ]; then
-    cp -an "/home/liyang/jvkit/owu-feedback/uploads/." "${DATA_DIR}/feedback-uploads/" || true
-    echo "==> 复制 feedback/uploads"
+if [ -d "${DST_FBU}" ] && [ -n "$(ls -A ${DST_FBU} 2>/dev/null)" ]; then
+    echo "==> 跳过 Feedback uploads（已存在）"
+else
+    echo "==> 复制 Feedback 上传卷（feedback-uploads）"
+    mkdir -p "${DST_FBU}"
+    docker run --rm -v feedback-uploads:/src:ro -v "${DST_FBU}:/dst" alpine:3 cp -a /src/. /dst/
 fi
 
 echo "==> 迁移完成。目录结构："

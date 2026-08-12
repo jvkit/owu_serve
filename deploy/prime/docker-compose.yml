@@ -19,7 +19,7 @@ services:
       context: ./src/webui
       dockerfile: Dockerfile.incremental
     ports:
-      - "127.0.0.1:3001:8080"
+      - "127.0.0.1:3011:8080"
     env_file: .env
     environment:
       WEBUI_NAME: PRIME AI
@@ -50,7 +50,7 @@ services:
     build:
       context: ./src/owu_serve/gateway
     ports:
-      - "127.0.0.1:3002:3019"
+      - "127.0.0.1:3012:3019"
     env_file: .env
     environment:
       PORT: "3019"
@@ -72,7 +72,7 @@ services:
     build:
       context: ./src/owu_serve/feedback
     ports:
-      - "127.0.0.1:3003:8000"
+      - "127.0.0.1:3013:8000"
     env_file: .env
     environment:
       PORT: "8000"
