@@ -67,6 +67,8 @@ app.use('/gw', express.static(staticRoot, { index: false }));
 
 // SPA fallbacks
 app.get('/dashboard', (_req, res) => res.sendFile(path.join(staticRoot, 'index.html')));
+// 用户中心独立入口（OWU iframe 嵌入用，避免与 OWU /dashboard 路由冲突）
+app.get('/uc', (_req, res) => res.sendFile(path.join(staticRoot, 'index.html')));
 app.get('/admin', (_req, res) => res.redirect('/admin/dashboard'));
 app.get('/admin/dashboard', (_req, res) => res.sendFile(path.join(staticRoot, 'admin.html')));
 
