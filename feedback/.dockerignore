@@ -1,0 +1,15 @@
+# Docker build context 排除（与 .gitignore 对齐）
+data/
+uploads/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.venv/
+logs/
+*.log
+.git/
+.gitignore
+docker-compose.yaml
+Dockerfile
+*.md

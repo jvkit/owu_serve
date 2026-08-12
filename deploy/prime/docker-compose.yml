@@ -1,0 +1,93 @@
+# PRIME AI 部署编排（服务器：/home/liyang/jvkit/prime）
+#
+# 设计原则：
+#   1. 全部服务容器化，对外只暴露一个端口（宿主机 nginx，默认 3304）
+#   2. 容器端口只绑定 127.0.0.1，外部不可直达
+#   3. 数据全部挂载到 ./data，从旧卷复制一份（不影响现有服务）
+#   4. 构建依赖分层缓存：依赖层不变则增量构建极快
+#
+# 用法：
+#   docker compose up -d --build        # 首次构建 + 启动
+#   docker compose up -d --build gateway feedback   # 只重建部分
+
+name: prime
+
+services:
+  open-webui:
+    image: prime-open-webui:latest
+    build:
+      context: ./src/webui
+      dockerfile: Dockerfile.incremental
+    ports:
+      - "127.0.0.1:3001:8080"
+    env_file: .env
+    environment:
+      WEBUI_NAME: PRIME AI
+      OPENAI_API_BASE_URL: http://gateway:3019/v1
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-none}
+      RAG_EMBEDDING_MODEL: sentence-transformers/all-MiniLM-L6-v2
+      RAG_RERANKING_MODEL: ""
+      AUXILIARY_EMBEDDING_MODEL: TaylorAI/bge-micro-v2
+      USE_SLIM_DOCKER: "true"
+      ENABLE_API_KEYS: "True"
+      ENABLE_FORWARD_USER_INFO_HEADERS: "True"
+      DO_NOT_TRACK: "true"
+      ANONYMIZED_TELEMETRY: "false"
+    volumes:
+      - ./data/open-webui:/app/backend/data
+    networks:
+      - prime-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  gateway:
+    image: prime-gateway:latest
+    build:
+      context: ./src/owu_serve/gateway
+    ports:
+      - "127.0.0.1:3002:3019"
+    env_file: .env
+    environment:
+      PORT: "3019"
+      DB_PATH: /app/data/gateway.db
+      LOG_DIR: /app/data/logs
+      DOCUMENTS_DIR: /app/data/documents
+      OPENWEBUI_BASE_URL: http://open-webui:8080
+      NODE_ENV: production
+    volumes:
+      - ./data/gateway:/app/data
+    networks:
+      - prime-net
+    restart: unless-stopped
+    depends_on:
+      - open-webui
+
+  feedback:
+    image: prime-feedback:latest
+    build:
+      context: ./src/owu_serve/feedback
+    ports:
+      - "127.0.0.1:3003:8000"
+    env_file: .env
+    environment:
+      PORT: "8000"
+      FEEDBACK_DATA_DIR: /app/data
+      FEEDBACK_UPLOADS_DIR: /app/uploads
+      OWUI_BASE_URL: http://open-webui:8080
+    volumes:
+      - ./data/feedback:/app/data
+      - ./data/feedback-uploads:/app/uploads
+    networks:
+      - prime-net
+    restart: unless-stopped
+    depends_on:
+      - open-webui
+
+networks:
+  prime-net:
+    driver: bridge
