@@ -147,6 +147,21 @@ async function createOrFetchUserTokenImpl(email: string, autoCreate: boolean = t
             dbUpdateUserRole(email, role);
             local.user_role = role;
         }
+
+        // Always sync remaining quota from NewAPI so that plan/top-up changes are reflected immediately.
+        try {
+            const remoteInfo = await searchRemoteToken(tokenNameForEmail(email), false);
+            if (remoteInfo && remoteInfo.id) {
+                db.prepare('UPDATE user_tokens SET remain_quota = ?, used_quota = ?, unlimited_quota = ?, updated_at = ? WHERE email = ?')
+                    .run(remoteInfo.quota || 0, remoteInfo.used_quota || 0, remoteInfo.unlimited_quota || 0, utcNow(), email);
+                local.remain_quota = remoteInfo.quota || 0;
+                local.used_quota = remoteInfo.used_quota || 0;
+                local.unlimited_quota = remoteInfo.unlimited_quota || 0;
+            }
+        } catch (e: any) {
+            logger.warn(`[Token] Quota sync failed for ${email}:`, e.message);
+        }
+
         return local;
     }
 
