@@ -12,8 +12,8 @@ import { owuDeleteCollection, owuListAllCollections, syncCollectionToOWU } from 
 import { config, SUPPORTED_EXTENSIONS, OCR_EXTENSIONS, PASSTHROUGH_EXTENSIONS } from '../../config';
 import { collectionDir, getEmailFromRequest, getTokenFromRequest } from '../files/service';
 
-function serializeCollection(c: any) {
-    return { id: c.id, name: c.name, isDefault: !!c.is_default, createdAt: c.created_at };
+function serializeCollection(c: any, fileCount: number) {
+    return { id: c.id, name: c.name, isDefault: !!c.is_default, createdAt: c.created_at, fileCount };
 }
 
 export function knowledgeModule(app: Express) {
@@ -37,9 +37,14 @@ export function knowledgeModule(app: Express) {
                     .catch((e: any) => logger.error('[owu] default collection/model sync failed:', e.message));
             }
             const storage = db.prepare('SELECT * FROM user_storage WHERE user_email = ?').get(email) as any;
+            const fileCounts = new Map<string, number>(
+                (db.prepare('SELECT collection_id, COUNT(*) as cnt FROM files GROUP BY collection_id').all() as any[]).map(
+                    (r: any) => [r.collection_id, r.cnt],
+                ),
+            );
             res.json({
                 ok: true,
-                collections: collections.map(serializeCollection),
+                collections: collections.map((c: any) => serializeCollection(c, fileCounts.get(c.id) || 0)),
                 storage: { used: storage.storage_used, quota: storage.storage_quota },
                 supportedExtensions: {
                     all: Array.from(SUPPORTED_EXTENSIONS).sort(),

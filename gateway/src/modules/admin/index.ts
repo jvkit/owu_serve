@@ -6,6 +6,7 @@ import { logger } from '../../lib/logger';
 import { signAdminSession, requireAdminAuth, getAdminTokenFromRequest } from '../../lib/auth';
 import { callNewApi } from '../../lib/newapi';
 import { usdToNative, nativeToUsd, cycleMs, utcNow } from '../../lib/utils';
+import { getPlanTiers, listPlanTiers, createPlanTier, updatePlanTier, deletePlanTier } from '../plans/tiers';
 import { getUserId, getUserStorage } from '../../lib/user';
 import {
     checkAndApplyPlanCycleSync,
@@ -33,6 +34,51 @@ export function adminModule(app: Express) {
         }
     });
 
+    // OWU token exchange: auto-login admin from OWU iframe
+    app.post('/api/admin/owu', async (req: Request, res: Response) => {
+        try {
+            const owuToken = String(req.body.owu_token || '').trim();
+            if (!owuToken) {
+                res.status(400).json({ ok: false, error: '缺少 OWU token' });
+                return;
+            }
+
+            const url = config.openWebuiBaseUrl + '/api/v1/auths/';
+            const owuRes = await fetch(url, {
+                headers: {
+                    Authorization: `Bearer ${owuToken}`,
+                    Accept: 'application/json',
+                },
+                signal: AbortSignal.timeout(config.openWebuiTimeoutSeconds * 1000),
+            }).catch((e: any) => {
+                logger.error('[admin/owu] OWU token verify network error:', e.message);
+                return null;
+            });
+
+            if (!owuRes) {
+                res.status(503).json({ ok: false, error: '身份验证服务暂时不可用' });
+                return;
+            }
+
+            const data: any = await owuRes.json().catch(() => null);
+            if (owuRes.status !== 200 || !data?.id) {
+                res.status(401).json({ ok: false, error: 'OWU token 无效或已过期' });
+                return;
+            }
+
+            if (data.role !== 'admin') {
+                res.status(403).json({ ok: false, error: '该账号不是管理员' });
+                return;
+            }
+
+            const token = signAdminSession();
+            res.json({ ok: true, token, expires_at: new Date(Date.now() + config.sessionTtlMs).toISOString() });
+        } catch (e: any) {
+            logger.error('[admin/owu] exchange error:', e);
+            res.status(500).json({ ok: false, error: '服务器内部错误，请稍后重试' });
+        }
+    });
+
     app.get('/api/admin/plans/search', async (req: Request, res: Response) => {
         try {
             const token = getAdminTokenFromRequest(req);
@@ -48,7 +94,7 @@ export function adminModule(app: Express) {
             const storage = db.prepare('SELECT * FROM user_storage WHERE user_email = ?').get(email) as any;
             const fc = db.prepare('SELECT COUNT(*) as count FROM files WHERE user_email = ?').get(email) as any;
             const tk = db.prepare('SELECT remain_quota, used_quota FROM user_tokens WHERE email = ?').get(email) as any;
-            const tier = config.planTiers[plan.tier];
+            const tier = getPlanTiers()[plan.tier];
 
             res.json({
                 ok: true,
@@ -109,7 +155,8 @@ export function adminModule(app: Express) {
 
             const email = String(req.body.email || '').trim().toLowerCase();
             const newTier = Number(req.body.new_tier) || 0;
-            if (!email || !newTier || !config.planTiers[newTier]) { res.status(400).json({ ok: false, error: 'Invalid tier' }); return; }
+            const tiers = getPlanTiers();
+            if (!email || !newTier || !tiers[newTier]) { res.status(400).json({ ok: false, error: 'Invalid tier' }); return; }
 
             await runWithAdminLock(email, async () => {
                 await checkAndApplyPlanCycleSync(email);
@@ -117,7 +164,7 @@ export function adminModule(app: Express) {
                 if (!plan || plan.status !== 'active') throw new Error('用户不在活跃套餐中');
                 if (newTier <= plan.tier) throw new Error('升级必须选择更高等级');
 
-                const tierInfo = config.planTiers[newTier];
+                const tierInfo = tiers[newTier];
                 const now = utcNow();
                 const expires = new Date(Date.now() + cycleMs()).toISOString().replace('T', ' ').substring(0, 19);
                 const expiresUnix = Math.floor(new Date(expires.replace(' ', 'T') + 'Z').getTime() / 1000);
@@ -157,7 +204,7 @@ export function adminModule(app: Express) {
 
             const email = String(req.body.email || '').trim().toLowerCase();
             const newTier = Number(req.body.new_tier) || 0;
-            if (!email || !newTier || !config.planTiers[newTier]) { res.status(400).json({ ok: false, error: 'Invalid tier' }); return; }
+            if (!email || !newTier || !getPlanTiers()[newTier]) { res.status(400).json({ ok: false, error: 'Invalid tier' }); return; }
 
             await runWithAdminLock(email, async () => {
                 await checkAndApplyPlanCycleSync(email);
@@ -220,11 +267,12 @@ export function adminModule(app: Express) {
 
             const email = String(req.body.email || '').trim().toLowerCase();
             const newTier = Number(req.body.tier) || 0;
-            if (!email || !newTier || !config.planTiers[newTier]) { res.status(400).json({ ok: false, error: 'Invalid tier' }); return; }
+            const tiers = getPlanTiers();
+            if (!email || !newTier || !tiers[newTier]) { res.status(400).json({ ok: false, error: 'Invalid tier' }); return; }
 
             await runWithAdminLock(email, async () => {
                 await checkAndApplyPlanCycleSync(email);
-                const tierInfo = config.planTiers[newTier];
+                const tierInfo = tiers[newTier];
                 const st = db.prepare('SELECT * FROM user_storage WHERE user_email = ?').get(email) as any;
                 const fc = db.prepare('SELECT COUNT(*) as count FROM files WHERE user_email = ?').get(email) as any;
                 if ((st?.storage_used || 0) > tierInfo.storage_quota || (fc?.count || 0) > tierInfo.file_count_quota) {
@@ -285,7 +333,7 @@ export function adminModule(app: Express) {
             if (!requireAdminAuth(req, res, token)) return;
 
             const limits: Record<number, { storage: number; files: number }> = {};
-            for (const [k, v] of Object.entries(config.planTiers)) {
+            for (const [k, v] of Object.entries(getPlanTiers())) {
                 limits[Number(k)] = { storage: v.storage_quota, files: v.file_count_quota };
             }
             res.json({ ok: true, tiers: limits });
@@ -325,6 +373,71 @@ export function adminModule(app: Express) {
                 };
             });
             res.json({ ok: true, users: result });
+        } catch (e: any) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    // Plan tier management
+    app.get('/api/admin/plan-tiers', (req: Request, res: Response) => {
+        try {
+            const token = getAdminTokenFromRequest(req);
+            if (!requireAdminAuth(req, res, token)) return;
+            res.json({ ok: true, tiers: listPlanTiers() });
+        } catch (e: any) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    app.post('/api/admin/plan-tiers', (req: Request, res: Response) => {
+        try {
+            const token = getAdminTokenFromRequest(req);
+            if (!requireAdminAuth(req, res, token)) return;
+
+            const id = Number(req.body.id);
+            const name = String(req.body.name || '').trim();
+            const storage_gb = Number(req.body.storage_gb);
+            const file_count = Number(req.body.file_count);
+            const chat_quota_usd = Number(req.body.chat_quota_usd);
+
+            if (!id || id < 1 || !name) { res.status(400).json({ ok: false, error: 'Invalid id or name' }); return; }
+            if (!Number.isFinite(storage_gb) || storage_gb < 0) { res.status(400).json({ ok: false, error: 'Invalid storage_gb' }); return; }
+            if (!Number.isFinite(file_count) || file_count < 0) { res.status(400).json({ ok: false, error: 'Invalid file_count' }); return; }
+            if (!Number.isFinite(chat_quota_usd) || chat_quota_usd < 0) { res.status(400).json({ ok: false, error: 'Invalid chat_quota_usd' }); return; }
+
+            createPlanTier({ id, name, storage_gb, file_count, chat_quota_usd, is_active: 1 });
+            res.json({ ok: true, message: '套餐档位已创建' });
+        } catch (e: any) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    app.put('/api/admin/plan-tiers/:id', (req: Request, res: Response) => {
+        try {
+            const token = getAdminTokenFromRequest(req);
+            if (!requireAdminAuth(req, res, token)) return;
+
+            const id = Number(req.params.id);
+            const patch: any = {};
+            if (req.body.name !== undefined) patch.name = String(req.body.name).trim();
+            if (req.body.storage_gb !== undefined) patch.storage_gb = Number(req.body.storage_gb);
+            if (req.body.file_count !== undefined) patch.file_count = Number(req.body.file_count);
+            if (req.body.chat_quota_usd !== undefined) patch.chat_quota_usd = Number(req.body.chat_quota_usd);
+            if (req.body.is_active !== undefined) patch.is_active = req.body.is_active ? 1 : 0;
+
+            updatePlanTier(id, patch);
+            res.json({ ok: true, message: '套餐档位已更新' });
+        } catch (e: any) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    app.delete('/api/admin/plan-tiers/:id', (req: Request, res: Response) => {
+        try {
+            const token = getAdminTokenFromRequest(req);
+            if (!requireAdminAuth(req, res, token)) return;
+            deletePlanTier(Number(req.params.id));
+            res.json({ ok: true, message: '套餐档位已删除' });
         } catch (e: any) {
             res.status(500).json({ ok: false, error: e.message });
         }

@@ -16,10 +16,15 @@ import { dashboardModule } from './modules/dashboard';
 import { adminModule } from './modules/admin';
 import { startPurgeTimer } from './modules/admin/service';
 import { feedbackModule } from './modules/feedback';
+import { userModule } from './modules/user';
+import { seedPlanTiersFromEnv } from './modules/plans/tiers';
 
 const app = express();
 app.disable('x-powered-by');
 app.use(cors({ origin: true, credentials: true }));
+
+// Seed plan tiers from environment on first startup
+seedPlanTiersFromEnv();
 
 // Register raw-body route before JSON parser
 // (moved here as placeholder; actual upload route lives in files module)
@@ -60,6 +65,7 @@ ragModule(app);
 dashboardModule(app);
 adminModule(app);
 feedbackModule(app);
+userModule(app);
 
 // Static frontend (built by Vite into frontend/dist, served under /gw/)
 const staticRoot = path.join(__dirname, '..', 'frontend', 'dist');

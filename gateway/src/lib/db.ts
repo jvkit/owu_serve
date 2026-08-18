@@ -88,6 +88,16 @@ export function initSchema() {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS plan_tiers (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        storage_gb INTEGER NOT NULL,
+        file_count INTEGER NOT NULL,
+        chat_quota_usd REAL NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
     `);
 
     db.exec(`CREATE INDEX IF NOT EXISTS idx_user_storage_email ON user_storage(user_email);`);

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { apiGet } from './lib/api';
-  import QuotaCard from './components/QuotaCard.svelte';
+  import UsageCard from './components/UsageCard.svelte';
+  import ProfileCard from './components/ProfileCard.svelte';
   import KnowledgePanel from './components/KnowledgePanel.svelte';
 
   onMount(() => {
@@ -19,6 +20,7 @@
   let loginPassword = $state('');
   let loginLoading = $state(false);
   let owuExchanging = $state(false);
+  let lastOwuToken = $state('');
 
   try {
     token = localStorage.getItem('gw_token') || '';
@@ -28,8 +30,9 @@
   }
 
   async function exchangeOwuToken(owuToken: string) {
-    if (token || owuExchanging) return;
+    if (!owuToken || owuToken === lastOwuToken || owuExchanging) return;
     owuExchanging = true;
+    lastOwuToken = owuToken;
     error = '';
     try {
       const res = await fetch('/api/auth/owu', {
@@ -40,12 +43,19 @@
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'OWU 登录信息无效');
 
+      const newEmail = data.user?.email || '';
+      const switched = newEmail && newEmail !== email;
       token = data.token;
-      email = data.user?.email || '';
+      email = newEmail;
       localStorage.setItem('gw_token', token);
       localStorage.setItem('gw_email', email);
+      // 如果切换了账号，刷新页面以清空组件内的旧状态
+      if (switched) {
+        window.location.reload();
+      }
     } catch (e: any) {
       error = e.message;
+      lastOwuToken = '';
     } finally {
       owuExchanging = false;
     }
@@ -58,6 +68,14 @@
       }
     };
     window.addEventListener('message', handler);
+
+    // 主动向父页面请求当前 OWU token，确保账号切换后能重新鉴权
+    try {
+      window.parent.postMessage({ type: 'OWU_TOKEN_REQUEST' }, '*');
+    } catch {
+      // ignore
+    }
+
     return () => window.removeEventListener('message', handler);
   }
 
@@ -149,9 +167,11 @@
     <p class="error">{error}</p>
   {:else if quota}
     <KnowledgePanel />
-    <div class="stats-grid">
-      <QuotaCard {quota} {email} />
+    <div class="usage-row">
+      <UsageCard {quota} type="chat" />
+      <UsageCard {quota} type="storage" />
     </div>
+    <ProfileCard {quota} {email} />
   {/if}
 </main>
 
@@ -168,20 +188,15 @@
     margin: 0;
   }
 
-  .stats-grid {
+  .usage-row {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: 1fr 1fr;
     gap: 1rem;
-  }
-
-  @media (max-width: 1200px) {
-    .stats-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
+    margin-top: 1rem;
   }
 
   @media (max-width: 640px) {
-    .stats-grid {
+    .usage-row {
       grid-template-columns: 1fr;
     }
   }

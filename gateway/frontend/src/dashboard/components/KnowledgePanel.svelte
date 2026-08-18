@@ -5,19 +5,21 @@
   let collections: any[] = $state([]);
   let selectedCollectionId: string = $state('');
   let files: any[] = $state([]);
+  let view = $state<'list' | 'detail'>('list');
   let loading = $state(false);
   let error = $state('');
   let uploadProgress = $state('');
   let newCollectionName = $state('');
   let dragging = $state(false);
 
+  const currentName = $derived(
+    collections.find((c) => c.id === selectedCollectionId)?.name || ''
+  );
+
   async function loadCollections() {
     try {
       const data = await apiGet('/api/files/collections');
       collections = data.collections || [];
-      if (collections.length > 0 && !selectedCollectionId) {
-        selectedCollectionId = collections[0].id;
-      }
     } catch (e: any) {
       error = e.message;
     }
@@ -36,6 +38,19 @@
     }
   }
 
+  function openCollection(id: string) {
+    selectedCollectionId = id;
+    view = 'detail';
+    loadFiles();
+  }
+
+  function goBack() {
+    view = 'list';
+    selectedCollectionId = '';
+    files = [];
+    loadCollections();
+  }
+
   async function createCollection() {
     if (!newCollectionName.trim()) return;
     try {
@@ -51,9 +66,12 @@
     if (!confirm('确定删除这个知识库吗？')) return;
     try {
       await apiDelete(`/api/files/collections/${id}`);
-      if (selectedCollectionId === id) selectedCollectionId = '';
+      if (selectedCollectionId === id) {
+        selectedCollectionId = '';
+        view = 'list';
+        files = [];
+      }
       await loadCollections();
-      await loadFiles();
     } catch (e: any) {
       error = e.message;
     }
@@ -201,7 +219,7 @@
   });
 
   $effect(() => {
-    loadFiles();
+    if (view === 'detail') loadFiles();
   });
 </script>
 
@@ -210,103 +228,171 @@
 
   {#if error}<p class="error">{error}</p>{/if}
 
-  <!-- 知识库选择（紧凑工具栏） -->
-  <div class="kb-toolbar">
-    <select bind:value={selectedCollectionId}>
-      {#each collections as c}
-        <option value={c.id}>{c.name}{c.isDefault ? '（默认）' : ''}</option>
-      {/each}
-    </select>
-    <input type="text" placeholder="新建知识库名称" bind:value={newCollectionName} />
-    <button onclick={createCollection}>创建</button>
-    <button class="danger" onclick={() => deleteCollection(selectedCollectionId)} disabled={!selectedCollectionId}>
-      删除
-    </button>
-  </div>
+  {#if view === 'list'}
+    <!-- 创建知识库 -->
+    <div class="create-bar">
+      <input type="text" placeholder="新建知识库名称" bind:value={newCollectionName} />
+      <button onclick={createCollection} disabled={!newCollectionName.trim()}>创建知识库</button>
+    </div>
 
-  <!-- 上传区（突出 + 拖拽） -->
-  <div
-    class="upload-area"
-    class:active={dragging}
-    ondragover={onDragOver}
-    ondragleave={onDragLeave}
-    ondrop={onDrop}
-  >
-    <input type="file" multiple onchange={handleFileUpload} />
-    <span class="upload-icon">⬆</span>
-    <span class="upload-title">点击选择 或 拖拽文件到此处上传</span>
-    <span class="upload-hint">支持 PDF、DOCX、PPTX、XLSX、STEP、STP，以及多种纯文本格式</span>
-  </div>
-  {#if uploadProgress}<p class="muted upload-tip">{uploadProgress}</p>{/if}
-
-  <!-- 文件列表 -->
-  <div class="section">
-    <h3>文件列表</h3>
-    {#if loading}
-      <p class="muted">加载中...</p>
-    {:else if files.length === 0}
-      <p class="muted">暂无文件，上传后会自动解析并同步到对话知识库</p>
+    <!-- 知识库列表 -->
+    {#if collections.length === 0}
+      <p class="muted">暂无知识库，在上方填写名称创建一个吧</p>
     {:else}
-      <table class="file-table">
-        <thead>
-          <tr>
-            <th>名称</th>
-            <th>大小</th>
-            <th>状态</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each files as f}
-            {@const st = displayStatus(f)}
-            <tr>
-              <td>{f.name}</td>
-              <td>{formatBytes(f.size || 0)}</td>
-              <td>
-                {#if !st.done && !st.failed && st.progress !== null}
-                  <div class="bar file-progress"><div class="bar-fill" style="width: {st.progress}%;"></div></div>
-                  <span class="muted">{st.label} {st.progress}%</span>
-                {:else if !st.done && !st.failed}
-                  <div class="bar file-progress"><div class="bar-fill indeterminate"></div></div>
-                  <span class="muted">{st.label}</span>
-                {:else}
-                  <span class="status-text" class:done={st.done} class:failed={st.failed}>{st.label}</span>
-                {/if}
-                {#if f.error || f.owuError}
-                  <span class="muted" title={f.error || f.owuError}> ⚠</span>
-                {/if}
-              </td>
-              <td>
-                <button class="small" onclick={() => retryFile(f.id)} disabled={f.status !== 'parse_failed'}>重试</button>
-                <button class="small" onclick={() => rebuildFile(f.id)} disabled={f.status !== 'build_failed'}>重建</button>
-                <button class="small danger" onclick={() => deleteFile(f.id)}>删除</button>
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+      <div class="kb-grid">
+        {#each collections as c}
+          <div class="kb-card">
+            <div class="kb-head">
+              <span class="kb-name" title={c.name}>{c.name}{c.isDefault ? '（默认）' : ''}</span>
+              <span class="kb-count">{c.fileCount || 0} 个文件</span>
+            </div>
+            <div class="kb-actions">
+              <button class="small" onclick={() => openCollection(c.id)}>查看</button>
+              <button class="small danger" onclick={() => deleteCollection(c.id)}>删除</button>
+            </div>
+          </div>
+        {/each}
+      </div>
     {/if}
-  </div>
+  {:else}
+    <!-- 库详情：上传 + 文件列表 -->
+    <div class="detail-head">
+      <button class="small" onclick={goBack}>← 返回列表</button>
+      <h3 class="detail-title">{currentName}</h3>
+      <button class="small danger" onclick={() => deleteCollection(selectedCollectionId)}>删除知识库</button>
+    </div>
+
+    <div
+      class="upload-area"
+      class:active={dragging}
+      ondragover={onDragOver}
+      ondragleave={onDragLeave}
+      ondrop={onDrop}
+    >
+      <input type="file" multiple onchange={handleFileUpload} />
+      <span class="upload-icon">⬆</span>
+      <span class="upload-title">点击选择 或 拖拽文件到此处上传</span>
+      <span class="upload-hint">支持 PDF、DOCX、PPTX、XLSX、STEP、STP，以及多种纯文本格式</span>
+    </div>
+    {#if uploadProgress}<p class="muted upload-tip">{uploadProgress}</p>{/if}
+
+    <div class="section">
+      <h3>文件列表</h3>
+      {#if loading}
+        <p class="muted">加载中...</p>
+      {:else if files.length === 0}
+        <p class="muted">暂无文件，上传后会自动解析并同步到对话知识库</p>
+      {:else}
+        <table class="file-table">
+          <thead>
+            <tr>
+              <th>名称</th>
+              <th>大小</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each files as f}
+              {@const st = displayStatus(f)}
+              <tr>
+                <td>{f.name}</td>
+                <td>{formatBytes(f.size || 0)}</td>
+                <td>
+                  {#if !st.done && !st.failed && st.progress !== null}
+                    <div class="bar file-progress"><div class="bar-fill" style="width: {st.progress}%;"></div></div>
+                    <span class="muted">{st.label} {st.progress}%</span>
+                  {:else if !st.done && !st.failed}
+                    <div class="bar file-progress"><div class="bar-fill indeterminate"></div></div>
+                    <span class="muted">{st.label}</span>
+                  {:else}
+                    <span class="status-text" class:done={st.done} class:failed={st.failed}>{st.label}</span>
+                  {/if}
+                  {#if f.error || f.owuError}
+                    <span class="muted" title={f.error || f.owuError}> ⚠</span>
+                  {/if}
+                </td>
+                <td>
+                  <button class="small" onclick={() => retryFile(f.id)} disabled={f.status !== 'parse_failed'}>重试</button>
+                  <button class="small" onclick={() => rebuildFile(f.id)} disabled={f.status !== 'build_failed'}>重建</button>
+                  <button class="small danger" onclick={() => deleteFile(f.id)}>删除</button>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+    </div>
+  {/if}
 </section>
 
 <style>
-  .kb-toolbar {
+  .create-bar {
     display: flex;
     gap: 0.5rem;
     align-items: center;
     margin-bottom: 1rem;
+  }
+
+  .create-bar input {
+    flex: 1;
+    margin: 0;
+    min-width: 0;
+  }
+
+  .kb-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .kb-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    background: var(--bg);
+  }
+
+  .kb-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .kb-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .kb-count {
+    font-size: 0.78rem;
+    color: var(--muted);
+    flex: 0 0 auto;
+  }
+
+  .kb-actions {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  .detail-head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
     flex-wrap: wrap;
   }
 
-  .kb-toolbar select {
-    flex: 0 0 auto;
-    min-width: 140px;
-  }
-
-  .kb-toolbar input {
-    flex: 1 1 180px;
+  .detail-title {
     margin: 0;
-    min-width: 0;
+    flex: 1;
+    font-size: 1.05rem;
   }
 
   .upload-area {

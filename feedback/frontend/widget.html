@@ -248,6 +248,18 @@
       background: #ef4444; color: #fff; border: none; border-radius: 50%; font-size: 12px; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
     }
+    .previews .file-chip {
+      display: flex; align-items: center; gap: 6px; max-width: 180px;
+      padding: 6px 8px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
+      font-size: 12px; color: #374151;
+    }
+    .previews .file-chip .file-icon { flex: 0 0 auto; color: #6b7280; }
+    .previews .file-chip .file-name {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .upload-hint {
+      font-size: 12px; color: #6b7280; margin-top: 6px; line-height: 1.5;
+    }
 
     .submit {
       width: 100%;
@@ -332,11 +344,15 @@
         <label for="description">反馈描述</label>
         <textarea id="description" rows="4" minlength="10" maxlength="2000" required placeholder="问题现象 + 期望效果"></textarea>
 
-        <label for="screenshots">反馈截图（最多3张）</label>
+        <label for="screenshots">附件</label>
         <div class="file-input" id="screenshotsWrap">
-          <input type="file" id="screenshots" accept="image/png,image/jpeg" multiple />
+          <input type="file" id="screenshots" multiple />
           <label for="screenshots" class="file-label">选择文件</label>
           <span class="file-text" id="fileText">未选择任何文件</span>
+        </div>
+        <div class="upload-hint">
+          支持图片、PDF、Word、Excel、PPT、文本/日志、压缩包及各类常见文件；如遇错误，欢迎上传<b>脱敏后的相关文件</b>，方便开发者复现修复。
+          单文件不超过 50MB，总数量不超过 50 个；超出限制请联系管理员。
         </div>
         <div class="previews" id="previews"></div>
 
@@ -375,7 +391,11 @@
     const msg = document.getElementById('msg');
 
     function updateFileText() {
-      fileText.textContent = files.length > 0 ? `已选择 ${files.length} 张` : '未选择任何文件';
+      fileText.textContent = files.length > 0 ? `已选择 ${files.length} 个文件` : '未选择任何文件';
+    }
+
+    function escapeHtml(str) {
+      return String(str || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
     let profile = { join_ranking: 1 };
@@ -446,20 +466,47 @@
       }
     });
 
+    const MAX_FILES = 50;
+    const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
+    function tooLarge(filesList) {
+      return Array.from(filesList).find(f => f.size > MAX_FILE_SIZE);
+    }
+
     screenshotsInput.addEventListener('change', () => {
-      const selected = Array.from(screenshotsInput.files).slice(0, 3 - files.length);
-      for (const f of selected) {
+      const selected = Array.from(screenshotsInput.files);
+      const oversized = tooLarge(selected);
+      if (oversized) {
+        alert(`文件「${oversized.name}」超过 50MB，请联系管理员`);
+        screenshotsInput.value = '';
+        return;
+      }
+      const room = MAX_FILES - files.length;
+      if (room <= 0) {
+        alert(`附件总数不能超过 50 个，请联系管理员`);
+        screenshotsInput.value = '';
+        return;
+      }
+      const toAdd = selected.slice(0, room);
+      for (const f of toAdd) {
         files.push(f);
-        const url = URL.createObjectURL(f);
         const div = document.createElement('div');
         div.className = 'thumb';
-        div.innerHTML = `<img src="${url}" /><button class="remove" title="移除">×</button>`;
+        if (f.type && f.type.startsWith('image/')) {
+          const url = URL.createObjectURL(f);
+          div.innerHTML = `<img src="${url}" title="${escapeHtml(f.name)}" /><button class="remove" title="移除">×</button>`;
+        } else {
+          div.innerHTML = `<div class="file-chip"><span class="file-icon">📄</span><span class="file-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span></div><button class="remove" title="移除">×</button>`;
+        }
         div.querySelector('.remove').addEventListener('click', () => {
           files = files.filter(x => x !== f);
           div.remove();
           updateFileText();
         });
         previews.appendChild(div);
+      }
+      if (selected.length > toAdd.length) {
+        alert(`本次仅添加了 ${toAdd.length} 个文件，超出 50 个限制的部分未添加。如需上传更多，请联系管理员`);
       }
       screenshotsInput.value = '';
       updateFileText();
@@ -475,6 +522,18 @@
       if (!category || description.length < 10) {
         msg.className = 'msg error';
         msg.textContent = '请填写反馈项目并至少输入 10 个字符的描述';
+        return;
+      }
+
+      if (files.length > MAX_FILES) {
+        msg.className = 'msg error';
+        msg.textContent = `附件总数不能超过 ${MAX_FILES} 个，请联系管理员`;
+        return;
+      }
+      const oversized = tooLarge(files);
+      if (oversized) {
+        msg.className = 'msg error';
+        msg.textContent = `文件「${oversized.name}」超过 50MB，请联系管理员`;
         return;
       }
 

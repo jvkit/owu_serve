@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { db } from '../../lib/db';
 import { config } from '../../config';
+import { getPlanTiers } from './tiers';
 import { logger } from '../../lib/logger';
 import { callNewApi } from '../../lib/newapi';
 import { utcNow, randomId, cycleMs } from '../../lib/utils';
@@ -30,7 +31,7 @@ export function ensureUserPlan(email: string): void {
         "INSERT OR IGNORE INTO user_plans (user_email, user_id, tier, status, started_at, expires_at, created_at, updated_at) VALUES (?, ?, 1, 'active', ?, ?, ?, ?)"
     ).run(email, userId, now, expiresAt, now, now);
 
-    const t1 = config.planTiers[1];
+    const t1 = getPlanTiers()[1];
     db.prepare('UPDATE user_storage SET storage_quota = ?, file_count_quota = ?, updated_at = ? WHERE user_email = ?')
         .run(t1.storage_quota, t1.file_count_quota, now, email);
 }
@@ -68,7 +69,7 @@ export async function applyPlanCycle(email: string): Promise<void> {
 }
 
 export async function applyCycleTransition(email: string, plan: any): Promise<void> {
-    const tierInfo = config.planTiers[plan.next_tier];
+    const tierInfo = getPlanTiers()[plan.next_tier];
     if (!tierInfo) return;
 
     const tokenRow = db.prepare('SELECT token_id, token_name FROM user_tokens WHERE email = ?').get(email) as any;

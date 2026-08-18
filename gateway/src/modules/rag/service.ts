@@ -7,7 +7,9 @@ import {
     owuFindModelById,
     owuCreateModel,
     owuUpdateModel,
+    owuUpdateCollection,
     owuRequest,
+    getCollectionOWUDisplayName,
 } from '../../lib/owu';
 
 const modelSyncLocks = new Map<string, Promise<void>>();
@@ -32,21 +34,37 @@ async function syncUserModelImpl(email: string): Promise<void> {
         if (!user) return;
 
         const cols = db
-            .prepare('SELECT owu_collection_id, name FROM collections WHERE user_email = ? AND owu_collection_id IS NOT NULL')
+            .prepare('SELECT owu_collection_id, name, is_default FROM collections WHERE user_email = ? AND owu_collection_id IS NOT NULL')
             .all(email) as any[];
         const remoteCollections = await owuListCollections();
+
+        // 同步默认知识库在 OWU 侧的显示名（RAG（用户名））
+        for (const c of cols) {
+            if (!c.is_default) continue;
+            const remote = remoteCollections.items.find((k: any) => k.id === c.owu_collection_id);
+            if (!remote) continue;
+            const desiredName = getCollectionOWUDisplayName(c.name, true, user.name, user.email);
+            if (remote.name !== desiredName) {
+                owuUpdateCollection(c.owu_collection_id, { name: desiredName, description: '' }).catch((e: any) =>
+                    logger.error(`[owu] update collection name failed (${c.owu_collection_id}): ${e.message}`),
+                );
+            }
+        }
+
         const knowledge = cols.map((c: any) => {
             const remote = remoteCollections.items.find((k: any) => k.id === c.owu_collection_id);
+            const name = getCollectionOWUDisplayName(c.name, !!c.is_default, user.name, user.email);
             return {
                 id: c.owu_collection_id,
-                name: c.name,
+                name,
                 type: 'collection',
                 user_id: remote?.user_id || user.id,
             };
         });
 
         const modelId = `rag_${email}`;
-        const displayName = `RAG (${user.name})`;
+        const userDisplayName = (user.name || '').trim() || user.email.split('@')[0] || user.email;
+        const displayName = `RAG (${userDisplayName})`;
         const params: Record<string, any> = {
             system: config.ragSystemPrompt,
             temperature: config.owuRagTemperature,

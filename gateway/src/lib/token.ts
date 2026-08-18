@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { db } from './db';
 import { config } from '../config';
+import { getPlanTiers } from '../modules/plans/tiers';
 import { callNewApi } from './newapi';
 import { logger } from './logger';
 import { utcNow } from './utils';
@@ -175,7 +176,7 @@ async function createOrFetchUserTokenImpl(email: string, autoCreate: boolean = t
             customKey = 'sk-' + crypto.randomBytes(24).toString('hex');
         } while (db.prepare('SELECT 1 FROM user_tokens WHERE token_key = ?').get(customKey));
 
-        const t1 = config.planTiers[1];
+        const t1 = getPlanTiers()[1];
         const payload: any = {
             name: tName,
             remain_quota: usdToNative(t1.chat_quota_usd),
@@ -231,7 +232,7 @@ async function createOrFetchUserTokenImpl(email: string, autoCreate: boolean = t
         token_id: remoteInfo.id,
         token_name: tName,
         token_key: remoteInfo.key,
-        remain_quota: remoteInfo.quota || usdToNative(config.planTiers[1].chat_quota_usd),
+        remain_quota: remoteInfo.quota || usdToNative(getPlanTiers()[1].chat_quota_usd),
         used_quota: remoteInfo.used_quota || 0,
         unlimited_quota: remoteInfo.unlimited_quota || 0,
     };

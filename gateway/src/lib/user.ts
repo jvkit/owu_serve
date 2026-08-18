@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { db } from './db';
-import { config } from '../config';
+import { getPlanTiers } from '../modules/plans/tiers';
 import { utcNow } from './utils';
 
 export function generateUserId(): string {
@@ -17,7 +17,7 @@ export function ensureUserStorage(email: string): void {
     if (!row) {
         const now = utcNow();
         const userId = generateUserId();
-        const t1 = config.planTiers[1];
+        const t1 = getPlanTiers()[1];
         db.prepare(
             'INSERT OR IGNORE INTO user_storage (user_email, user_id, storage_quota, storage_used, file_count_quota, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?, ?)'
         ).run(email, userId, t1.storage_quota, t1.file_count_quota, now, now);

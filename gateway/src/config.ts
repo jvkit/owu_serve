@@ -13,7 +13,7 @@ function readFileWithFallback(filePath: string, fallback: string): string {
     }
 }
 
-function parsePlanTiers(raw: string): Record<number, { storage_quota: number; file_count_quota: number; chat_quota_usd: number }> {
+export function parsePlanTiers(raw: string): Record<number, { storage_quota: number; file_count_quota: number; chat_quota_usd: number }> {
     const tiers: Record<number, { storage_quota: number; file_count_quota: number; chat_quota_usd: number }> = {};
     raw.split('|').forEach((seg, i) => {
         const [gb, fc, quota] = seg.split(',').map(Number);
@@ -37,7 +37,6 @@ export const config = {
     planCycleDays: Number(process.env.PLAN_CYCLE_DAYS || 30),
     kbRetentionDays: Number(process.env.KB_RETENTION_DAYS || 30),
     purgeCheckIntervalSeconds: Number(process.env.PURGE_CHECK_INTERVAL_SECONDS || 3600),
-    planTiers: parsePlanTiers(process.env.PLAN_TIERS || '1,100,5|5,500,10|15,1500,20|30,3000,40|100,10000,150'),
 
     // Chat
     allowedModels: (process.env.ALLOWED_MODELS || 'btbtyler09-Qwen3-Coder-Next-GPTQ-4bit-kv16-tool')

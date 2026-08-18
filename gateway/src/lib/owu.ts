@@ -100,14 +100,16 @@ export async function owuListAllCollections(): Promise<any[]> {
     return all;
 }
 
-export async function owuCreateCollection(name: string): Promise<any> {
+export async function owuCreateCollection(name: string, ownerUserId?: string): Promise<any> {
     await owuGetAdminToken();
-    const { status, data } = await owuRequest('POST', '/api/v1/knowledge/create', {
+    const payload: Record<string, any> = {
         name,
         description: '',
         data: {},
         access_control: {},
-    });
+    };
+    if (ownerUserId) payload.user_id = ownerUserId;
+    const { status, data } = await owuRequest('POST', '/api/v1/knowledge/create', payload);
     if (status !== 200 && status !== 201) {
         throw new Error(`OWU create collection failed (${status}): ${JSON.stringify(data).slice(0, 200)}`);
     }
@@ -121,6 +123,29 @@ export async function owuDeleteCollection(id: string): Promise<void> {
     } catch (e: any) {
         if (!e.message?.includes('not found')) throw e;
     }
+}
+
+export function getCollectionOWUDisplayName(
+    name: string,
+    isDefault: boolean,
+    userName: string,
+    email: string,
+): string {
+    if (!isDefault) return name;
+    const displayName = (userName || '').trim() || email.split('@')[0] || email;
+    return `RAG（${displayName}）`;
+}
+
+export async function owuUpdateCollection(
+    id: string,
+    payload: { name?: string; description?: string; access_grants?: any[]; user_id?: string },
+): Promise<any> {
+    await owuGetAdminToken();
+    const { status, data } = await owuRequest('POST', `/api/v1/knowledge/${encodeURIComponent(id)}/update`, payload);
+    if (status !== 200 && status !== 201) {
+        throw new Error(`OWU update collection failed (${status}): ${JSON.stringify(data).slice(0, 200)}`);
+    }
+    return data;
 }
 
 export async function owuListUsers(): Promise<any[]> {
@@ -143,6 +168,38 @@ export async function owuGetUserByEmail(
     const user = users.find((u: any) => (u.email || '').toLowerCase() === email.toLowerCase());
     if (!user?.id) return null;
     return { id: user.id, name: user.name || email, email: user.email, role: user.role };
+}
+
+export async function owuGetFullUserByEmail(email: string): Promise<any | null> {
+    const users = await owuListUsers();
+    const user = users.find((u: any) => (u.email || '').toLowerCase() === email.toLowerCase());
+    if (!user?.id) return null;
+    return {
+        id: user.id,
+        name: user.name || email,
+        email: user.email,
+        role: user.role,
+        profile_image_url: user.profile_image_url || '',
+        bio: user.bio || '',
+        gender: user.gender || '',
+    };
+}
+
+export async function owuUpdateUserProfile(
+    userId: string,
+    data: { name?: string; profile_image_url?: string; bio?: string; gender?: string },
+): Promise<any> {
+    await owuGetAdminToken();
+    const body: Record<string, any> = {};
+    if (data.name !== undefined) body.name = data.name;
+    if (data.profile_image_url !== undefined) body.profile_image_url = data.profile_image_url;
+    if (data.bio !== undefined) body.bio = data.bio;
+    if (data.gender !== undefined) body.gender = data.gender;
+    const { status, data: resp } = await owuRequest('POST', `/api/v1/users/${encodeURIComponent(userId)}/update`, body);
+    if (status !== 200 && status !== 201) {
+        throw new Error(`OWU profile update failed (${status}): ${JSON.stringify(resp).slice(0, 200)}`);
+    }
+    return resp;
 }
 
 export async function owuDeleteFile(fileId: string): Promise<void> {
@@ -278,6 +335,7 @@ export async function owuCreateModel(
         params,
         is_active: true,
         access_grants: owuUserId ? [{ principal_type: 'user', principal_id: owuUserId, permission: 'read' }] : undefined,
+        user_id: owuUserId || undefined,
     };
     const { status, data } = await owuRequest('POST', '/api/v1/models/create', payload);
     if (status !== 200 && status !== 201) {
@@ -312,6 +370,7 @@ export async function owuUpdateModel(
         params,
         is_active: true,
         access_grants: owuUserId ? [{ principal_type: 'user', principal_id: owuUserId, permission: 'read' }] : undefined,
+        user_id: owuUserId || undefined,
     };
     const { status, data } = await owuRequest('POST', '/api/v1/models/create', payload);
     if (status !== 200 && status !== 201) {
@@ -345,15 +404,22 @@ export async function syncCollectionToOWU(email: string, collectionId: string): 
 async function syncCollectionToOWUImpl(email: string, collectionId: string): Promise<void> {
     try {
         await owuGetAdminToken();
-        const col = db.prepare('SELECT name, owu_collection_id FROM collections WHERE id = ? AND user_email = ?').get(
-            collectionId,
-            email,
-        ) as any;
+        const col = db
+            .prepare('SELECT name, is_default, owu_collection_id FROM collections WHERE id = ? AND user_email = ?')
+            .get(collectionId, email) as any;
         if (!col) return;
+
+        const user = await owuGetUserByEmail(email);
+        if (!user) {
+            logger.warn(`[owu] user not found while syncing collection: ${email}`);
+            return;
+        }
+
+        const displayName = getCollectionOWUDisplayName(col.name, !!col.is_default, user.name, user.email);
 
         let owuColId = col.owu_collection_id;
         if (!owuColId) {
-            const created = await owuCreateCollection(col.name);
+            const created = await owuCreateCollection(displayName, user.id);
             owuColId = created?.id;
             if (owuColId) {
                 db.prepare('UPDATE collections SET owu_collection_id = ? WHERE id = ?').run(owuColId, collectionId);
@@ -361,14 +427,12 @@ async function syncCollectionToOWUImpl(email: string, collectionId: string): Pro
         }
 
         if (owuColId) {
-            const userId = await owuFindUserIdByEmail(email);
-            if (userId) {
-                await owuUpdateReaders(owuColId, [userId]);
-            } else {
-                logger.warn(`[owu] user not found while syncing collection access: ${email}`);
-            }
+            // 同步知识库显示名（默认库映射为 RAG（用户名））
+            await owuUpdateCollection(owuColId, { name: displayName, description: '' });
+            // 新建库 owner 已是该用户本人；对存量库（服务号代建的）仍补充读授权兜底
+            await owuUpdateReaders(owuColId, [user.id]);
         }
-        logger.info(`[owu] collection synced: ${col.name} (${owuColId})`);
+        logger.info(`[owu] collection synced: ${displayName} (${owuColId})`);
     } catch (e: any) {
         logger.error(`[owu] sync collection failed (${email}, ${collectionId}): ${e.message}`);
     }
