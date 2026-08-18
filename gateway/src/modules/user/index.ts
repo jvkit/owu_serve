@@ -1,8 +1,9 @@
 import type { Express, Request, Response } from 'express';
 import { requireAuth } from '../../lib/auth';
 import { logger } from '../../lib/logger';
-import { owuFindUserIdByEmail, owuGetFullUserByEmail, owuUpdateUserProfile } from '../../lib/owu';
+import { owuFindUserIdByEmail, owuGetFullUserByEmail, owuUpdateUserProfile, owuRequestRaw } from '../../lib/owu';
 import { getEmailFromRequest, getTokenFromRequest } from '../files/service';
+import { config } from '../../config';
 
 export function userModule(app: Express) {
     // 当前用户 OWU 资料（name/头像/bio/gender/role）
@@ -16,10 +17,52 @@ export function userModule(app: Express) {
                 res.status(404).json({ ok: false, error: '用户不存在' });
                 return;
             }
+            // 头像走 gateway 代理，避免 OWU /users/all 不返回 base64 的问题
+            profile.profile_image_url = `${config.openWebuiBaseUrl}/api/v1/users/${profile.id}/profile/image`;
             res.json({ ok: true, profile });
         } catch (e: any) {
             logger.error('[user] get profile error:', e);
             res.status(500).json({ ok: false, error: e.message || '获取资料失败' });
+        }
+    });
+
+    // 当前用户头像代理（OWU /users/all 不返回 base64，直接代理 profile/image 端点）
+    app.get('/api/user/avatar', async (req: Request, res: Response) => {
+        try {
+            const email = getEmailFromRequest(req);
+            const token = getTokenFromRequest(req);
+            if (!requireAuth(req, res, email, token)) return;
+
+            const owuUserId = await owuFindUserIdByEmail(email);
+            if (!owuUserId) {
+                res.status(404).end();
+                return;
+            }
+
+            const upstream = await owuRequestRaw('GET', `/api/v1/users/${encodeURIComponent(owuUserId)}/profile/image`, undefined, undefined, 30000);
+            if (upstream.status === 302 || upstream.status === 301) {
+                res.status(upstream.status).setHeader('Location', upstream.headers.get('Location') || '');
+                res.end();
+                return;
+            }
+            res.status(upstream.status);
+            upstream.headers.forEach((val: string, key: string) => {
+                const lower = key.toLowerCase();
+                if (lower === 'content-encoding' || lower === 'content-length' || lower === 'transfer-encoding') return;
+                res.setHeader(key, val);
+            });
+            if (upstream.body) {
+                const reader = upstream.body.getReader();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    res.write(value);
+                }
+            }
+            res.end();
+        } catch (e: any) {
+            logger.error('[user] avatar proxy error:', e);
+            res.status(500).end();
         }
     });
 

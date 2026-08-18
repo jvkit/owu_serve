@@ -58,6 +58,32 @@ export async function owuRequest(
     return { status: res.status, data };
 }
 
+export async function owuRequestRaw(
+    method: string,
+    path: string,
+    body?: any,
+    contentType?: string,
+    timeoutMs?: number,
+): Promise<Response> {
+    const headers: Record<string, string> = { Accept: '*/*' };
+    if (contentType) headers['Content-Type'] = contentType;
+    if (owuTokenCache) headers['Authorization'] = `Bearer ${owuTokenCache}`;
+
+    const isJson = !contentType || contentType.includes('json');
+    const reqBody = body instanceof Buffer || typeof body === 'string' ? body : body ? JSON.stringify(body) : undefined;
+    if (isJson && reqBody && !contentType) headers['Content-Type'] = 'application/json';
+
+    const url = config.openWebuiBaseUrl + path;
+    const timeout = timeoutMs ?? config.openWebuiTimeoutSeconds * 1000;
+    return fetch(url, {
+        method,
+        headers,
+        body: reqBody,
+        signal: AbortSignal.timeout(timeout),
+    });
+}
+
+
 export async function owuSignIn(): Promise<string> {
     const { status, data } = await owuRequest('POST', '/api/v1/auths/signin', {
         email: config.openWebuiEmail,

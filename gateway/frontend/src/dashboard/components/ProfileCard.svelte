@@ -28,7 +28,8 @@
         name = data.profile.name || displayName;
         bio = data.profile.bio || '';
         gender = data.profile.gender || '';
-        avatar = data.profile.profile_image_url || '';
+        // 优先走 gateway 头像代理，避免跨域和 OWU 不返回 base64 的问题
+        avatar = '/api/user/avatar';
       }
     } catch (e: any) {
       err = e.message;
@@ -53,12 +54,18 @@
     msg = '';
     err = '';
     try {
-      await apiPost('/api/user/profile', {
+      const payload: any = {
         name: name.trim() || undefined,
         bio,
         gender: gender || undefined,
-        profile_image_url: avatar || undefined,
-      });
+      };
+      // 只有用户新上传了 base64 图片才回写 OWU
+      if (avatar && avatar.startsWith('data:')) {
+        payload.profile_image_url = avatar;
+      }
+      await apiPost('/api/user/profile', payload);
+      // 刷新头像缓存
+      avatar = '/api/user/avatar?t=' + Date.now();
       msg = '资料已保存';
     } catch (e: any) {
       err = e.message;
