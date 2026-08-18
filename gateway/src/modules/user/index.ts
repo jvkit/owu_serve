@@ -17,8 +17,19 @@ export function userModule(app: Express) {
                 res.status(404).json({ ok: false, error: '用户不存在' });
                 return;
             }
-            // 头像走 gateway 代理，避免 OWU /users/all 不返回 base64 的问题
-            profile.profile_image_url = `${config.openWebuiBaseUrl}/api/v1/users/${profile.id}/profile/image`;
+            // OWU /users/all 不返回 base64 头像，直接调用 profile/image 端点拉取二进制并转 base64
+            if (profile.id) {
+                try {
+                    const upstream = await owuRequestRaw('GET', `/api/v1/users/${encodeURIComponent(profile.id)}/profile/image`, undefined, undefined, 30000);
+                    if (upstream.ok && upstream.status === 200) {
+                        const contentType = upstream.headers.get('content-type') || 'image/png';
+                        const buf = Buffer.from(await upstream.arrayBuffer());
+                        profile.profile_image_url = `data:${contentType};base64,${buf.toString('base64')}`;
+                    }
+                } catch (e: any) {
+                    logger.warn('[user] failed to load avatar:', e.message);
+                }
+            }
             res.json({ ok: true, profile });
         } catch (e: any) {
             logger.error('[user] get profile error:', e);

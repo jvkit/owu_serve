@@ -28,8 +28,7 @@
         name = data.profile.name || displayName;
         bio = data.profile.bio || '';
         gender = data.profile.gender || '';
-        // 优先走 gateway 头像代理，避免跨域和 OWU 不返回 base64 的问题
-        avatar = '/api/user/avatar';
+        avatar = data.profile.profile_image_url || '';
       }
     } catch (e: any) {
       err = e.message;
@@ -64,8 +63,11 @@
         payload.profile_image_url = avatar;
       }
       await apiPost('/api/user/profile', payload);
-      // 刷新头像缓存
-      avatar = '/api/user/avatar?t=' + Date.now();
+      // 重新拉取 profile，用服务端返回的最新 base64 头像
+      const refreshed = await apiGet('/api/user/profile');
+      if (refreshed.ok && refreshed.profile) {
+        avatar = refreshed.profile.profile_image_url || '';
+      }
       msg = '资料已保存';
     } catch (e: any) {
       err = e.message;
