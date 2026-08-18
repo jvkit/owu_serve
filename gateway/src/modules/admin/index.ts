@@ -132,9 +132,33 @@ export function adminModule(app: Express) {
             await runWithAdminLock(email, async () => {
                 await checkAndApplyPlanCycleSync(email);
                 const plan = db.prepare('SELECT * FROM user_plans WHERE user_email = ?').get(email) as any;
-                if (!plan || plan.status !== 'active') throw new Error('用户不在活跃套餐中');
-                if (plan.next_tier != null) throw new Error('当前有待生效的套餐，请等待套餐生效后再续费');
+                if (!plan) throw new Error('用户尚未拥有套餐，请先分配套餐');
+
                 const now = utcNow();
+                const tiers = getPlanTiers();
+                const tierInfo = tiers[plan.tier];
+                if (!tierInfo) throw new Error('当前套餐档位已不存在');
+
+                // 已过期：立即重新激活当前档位
+                if (plan.status === 'inactive') {
+                    const expires = new Date(Date.now() + cycleMs()).toISOString().replace('T', ' ').substring(0, 19);
+                    const expiresUnix = Math.floor((Date.now() + cycleMs()) / 1000);
+                    const tr = db.prepare('SELECT token_id, token_name FROM user_tokens WHERE email = ?').get(email) as any;
+                    if (tr) {
+                        const r1 = await callNewApi('PUT', '/api/token/', { id: tr.token_id, name: tr.token_name, remain_quota: usdToNative(tierInfo.chat_quota_usd), expired_time: expiresUnix });
+                        if (r1.status < 200 || r1.status >= 300 || !r1.data?.success) throw new Error('NewAPI token update failed');
+                        const r2 = await callNewApi('PUT', '/api/token/?status_only=1', { id: tr.token_id, status: 1 });
+                        if (r2.status < 200 || r2.status >= 300 || !r2.data?.success) throw new Error('NewAPI token re-enable failed');
+                        db.prepare('UPDATE user_tokens SET remain_quota = ?, updated_at = ? WHERE email = ?').run(usdToNative(tierInfo.chat_quota_usd), now, email);
+                    }
+                    db.prepare("UPDATE user_plans SET status = 'active', started_at = ?, expires_at = ?, next_tier = NULL, next_expires_at = NULL, extra_quota = 0, updated_at = ? WHERE user_email = ?")
+                        .run(now, expires, now, email);
+                    res.json({ ok: true, message: '套餐已重新激活并续期一个周期' });
+                    return;
+                }
+
+                if (plan.status !== 'active') throw new Error('用户不在活跃套餐中');
+                if (plan.next_tier != null) throw new Error('当前有待生效的套餐，请等待套餐生效后再续费');
                 const nextExpires = new Date(new Date(plan.expires_at.replace(' ', 'T') + 'Z').getTime() + cycleMs())
                     .toISOString()
                     .replace('T', ' ')
