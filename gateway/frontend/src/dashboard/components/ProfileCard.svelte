@@ -151,23 +151,40 @@
 </section>
 
 <style>
+  .profile-card {
+    position: sticky;
+    top: 1rem;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .profile-card > * {
+    flex: 0 0 auto;
+  }
+
+  .profile-card .save-btn {
+    margin-top: auto;
+  }
+
   .profile-top {
     display: flex;
-    gap: 1rem;
+    gap: 0.75rem;
     align-items: flex-start;
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
   }
 
   .avatar-wrap {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.3rem;
+    flex: 0 0 auto;
   }
 
   .avatar {
-    width: 72px;
-    height: 72px;
+    width: 64px;
+    height: 64px;
     border-radius: 50%;
     object-fit: cover;
     border: 1px solid var(--border);
@@ -179,66 +196,90 @@
     justify-content: center;
     background: var(--bg);
     color: var(--muted);
-    font-size: 1.6rem;
+    font-size: 1.4rem;
     font-weight: 600;
   }
 
   .avatar-upload {
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     color: var(--primary);
     cursor: pointer;
+    white-space: nowrap;
   }
 
   .profile-info {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.4rem;
+    min-width: 0;
+  }
+
+  .profile-info input {
+    margin-top: 0.2rem;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.875rem;
   }
 
   .edit-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 0.6rem;
-    margin-bottom: 1rem;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .edit-grid select,
+  .edit-grid textarea {
+    margin-top: 0.2rem;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.875rem;
+  }
+
+  .edit-grid textarea {
+    resize: vertical;
+    min-height: 60px;
   }
 
   .role-badge {
     align-self: flex-start;
     display: inline-block;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     color: var(--muted);
     background: var(--bg);
     border: 1px solid var(--border);
-    padding: 0.15rem 0.6rem;
+    padding: 0.1rem 0.5rem;
     border-radius: 999px;
   }
 
   .plan-box {
     border-top: 1px solid var(--border);
-    padding-top: 0.8rem;
-    margin-bottom: 0.8rem;
+    padding-top: 0.6rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .plan-box > .muted {
+    font-size: 0.78rem;
   }
 
   .plan-line {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    margin: 0.4rem 0;
+    gap: 0.5rem;
+    margin: 0.3rem 0;
   }
 
   .plan-tier {
-    font-size: 1.4rem;
+    font-size: 1.3rem;
     font-weight: 700;
     line-height: 1;
   }
 
   .plan-status {
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     color: var(--muted);
     background: var(--bg);
     border: 1px solid var(--border);
-    padding: 0.15rem 0.55rem;
+    padding: 0.1rem 0.5rem;
     border-radius: 999px;
   }
 
@@ -251,17 +292,24 @@
   .plan-meta {
     display: flex;
     flex-direction: column;
-    gap: 0.3rem;
-    font-size: 0.85rem;
+    gap: 0.2rem;
+    font-size: 0.78rem;
   }
 
   .save-btn {
     width: 100%;
+    padding: 0.5rem 0.75rem;
   }
 
   .ok {
     color: #16a34a;
-    font-size: 0.85rem;
-    margin: 0.4rem 0;
+    font-size: 0.82rem;
+    margin: 0.3rem 0;
+  }
+
+  .error {
+    color: var(--danger);
+    font-size: 0.82rem;
+    margin: 0.3rem 0;
   }
 </style>

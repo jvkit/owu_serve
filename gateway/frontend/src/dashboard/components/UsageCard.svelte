@@ -48,27 +48,42 @@
 </section>
 
 <style>
+  .stat-card {
+    padding: 0.9rem 1rem;
+  }
+
+  .stat-card h2 {
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+  }
+
   .quota-3 {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 0.5rem;
-    margin: 0.25rem 0 0.5rem;
+    gap: 0.4rem;
+    margin: 0.2rem 0 0.4rem;
   }
 
   .quota-item {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.1rem;
+    gap: 0.05rem;
   }
 
   .quota-num {
-    font-size: 1rem;
+    font-size: 1.15rem;
     font-weight: 700;
-    line-height: 1.2;
+    line-height: 1.1;
+  }
+
+  .bar {
+    height: 6px;
+    margin-bottom: 0.3rem;
   }
 
   .tiny {
-    font-size: 0.78rem;
+    font-size: 0.75rem;
+    margin: 0;
   }
 </style>

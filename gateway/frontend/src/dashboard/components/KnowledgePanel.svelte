@@ -223,7 +223,7 @@
   });
 </script>
 
-<section class="card">
+<section class="card knowledge-card">
   <h2>我的知识库</h2>
 
   {#if error}<p class="error">{error}</p>{/if}
@@ -239,10 +239,10 @@
     {#if collections.length === 0}
       <p class="muted">暂无知识库，在上方填写名称创建一个吧</p>
     {:else}
-      <div class="kb-grid">
+      <div class="kb-list">
         {#each collections as c}
-          <div class="kb-card">
-            <div class="kb-head">
+          <div class="kb-item">
+            <div class="kb-info">
               <span class="kb-name" title={c.name}>{c.name}{c.isDefault ? '（默认）' : ''}</span>
               <span class="kb-count">{c.fileCount || 0} 个文件</span>
             </div>
@@ -327,40 +327,65 @@
 </section>
 
 <style>
+  .knowledge-card {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .knowledge-card > * {
+    flex: 0 0 auto;
+  }
+
+  .knowledge-card .section,
+  .knowledge-card .kb-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
   .create-bar {
     display: flex;
     gap: 0.5rem;
     align-items: center;
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
   }
 
   .create-bar input {
     flex: 1;
     margin: 0;
     min-width: 0;
+    padding: 0.45rem 0.6rem;
   }
 
-  .kb-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 0.75rem;
-  }
-
-  .kb-card {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 0.75rem 0.9rem;
+  .kb-list {
     display: flex;
     flex-direction: column;
-    gap: 0.6rem;
-    background: var(--bg);
+    gap: 0.4rem;
   }
 
-  .kb-head {
+  .kb-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.5rem;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    transition: border-color 0.15s;
+  }
+
+  .kb-item:hover {
+    border-color: var(--primary);
+  }
+
+  .kb-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+    flex: 1;
   }
 
   .kb-name {
@@ -371,21 +396,22 @@
   }
 
   .kb-count {
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     color: var(--muted);
     flex: 0 0 auto;
   }
 
   .kb-actions {
     display: flex;
-    gap: 0.4rem;
+    gap: 0.35rem;
+    flex: 0 0 auto;
   }
 
   .detail-head {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
+    gap: 0.6rem;
+    margin-bottom: 0.6rem;
     flex-wrap: wrap;
   }
 
@@ -399,15 +425,15 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.35rem;
-    padding: 2rem 1rem;
+    gap: 0.3rem;
+    padding: 1.5rem 1rem;
     border: 2px dashed var(--border);
     border-radius: var(--radius);
     text-align: center;
     color: var(--muted);
     cursor: pointer;
     transition: border-color 0.2s, background-color 0.2s;
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
   }
 
   .upload-area:hover {
@@ -426,28 +452,29 @@
   }
 
   .upload-icon {
-    font-size: 1.6rem;
+    font-size: 1.4rem;
     line-height: 1;
   }
 
   .upload-title {
-    font-size: 1rem;
+    font-size: 0.95rem;
     font-weight: 600;
   }
 
   .upload-hint {
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     opacity: 0.85;
   }
 
   .upload-tip {
-    margin-top: -0.5rem;
-    margin-bottom: 1rem;
+    margin-top: -0.4rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.78rem;
   }
 
   .file-progress {
-    width: 120px;
-    margin-bottom: 0.25rem;
+    width: 100px;
+    margin-bottom: 0.2rem;
   }
 
   .bar-fill.indeterminate {
@@ -466,5 +493,14 @@
 
   .status-text.failed {
     color: var(--danger);
+  }
+
+  .file-table {
+    font-size: 0.82rem;
+  }
+
+  .file-table th,
+  .file-table td {
+    padding: 0.4rem 0.5rem;
   }
 </style>

@@ -6,6 +6,12 @@
   import KnowledgePanel from './components/KnowledgePanel.svelte';
 
   onMount(() => {
+    // 独立打开时（非 iframe）直接显示登录表单，不等待 OWU token
+    const inIframe = window.parent !== window;
+    if (!inIframe) {
+      loading = false;
+      return;
+    }
     return setupOwuMessageListener();
   });
 
@@ -143,7 +149,7 @@
     </div>
   </header>
 
-  {#if loading || owuExchanging}
+  {#if loading || (owuExchanging && window.parent !== window)}
     <p class="muted">{owuExchanging ? '正在通过 OWU 登录...' : '加载中...'}</p>
   {:else if !token}
     <section class="card login-card">
@@ -166,12 +172,18 @@
   {:else if error}
     <p class="error">{error}</p>
   {:else if quota}
-    <KnowledgePanel />
-    <div class="usage-row">
-      <UsageCard {quota} type="chat" />
-      <UsageCard {quota} type="storage" />
+    <div class="dashboard-grid">
+      <aside class="sidebar">
+        <ProfileCard {quota} {email} />
+      </aside>
+      <div class="main-content">
+        <div class="usage-row">
+          <UsageCard {quota} type="chat" />
+          <UsageCard {quota} type="storage" />
+        </div>
+        <KnowledgePanel />
+      </div>
     </div>
-    <ProfileCard {quota} {email} />
   {/if}
 </main>
 
@@ -188,11 +200,33 @@
     margin: 0;
   }
 
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 1rem;
+    align-items: stretch;
+    height: calc(100vh - 80px);
+    min-height: 0;
+  }
+
+  .main-content {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
   .usage-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
-    margin-top: 1rem;
+    margin-bottom: 1rem;
+    flex: 0 0 auto;
+  }
+
+  @media (max-width: 900px) {
+    .dashboard-grid {
+      grid-template-columns: 1fr;
+    }
   }
 
   @media (max-width: 640px) {
